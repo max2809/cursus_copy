@@ -1,35 +1,30 @@
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 from studybuddy.db.base import Base
 from studybuddy.main import create_app
 
 
-TEST_DATABASE_URL = "postgresql+asyncpg://studybuddy:studybuddy@localhost:5432/studybuddy_test"
+# Use an in-memory SQLite DB for tests. Production uses Postgres (Neon), but
+# tests exercise CRUD and business logic only — no pgvector, no PG-specific
+# features. SQLite via aiosqlite avoids the Windows ProactorEventLoop +
+# asyncpg teardown issues and is much faster for unit tests.
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def test_engine():
-    # Ensure the test database exists, creating it if needed.
-    admin_engine = create_async_engine(
-        "postgresql+asyncpg://studybuddy:studybuddy@localhost:5432/postgres",
-        isolation_level="AUTOCOMMIT",
+    # StaticPool + single shared connection so the :memory: DB is the same
+    # across all checkouts within one test. New engine per test = clean slate.
+    engine = create_async_engine(
+        TEST_DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
     )
-    async with admin_engine.connect() as conn:
-        exists = (await conn.execute(
-            text("SELECT 1 FROM pg_database WHERE datname='studybuddy_test'")
-        )).scalar()
-        if not exists:
-            await conn.execute(text("CREATE DATABASE studybuddy_test"))
-    await admin_engine.dispose()
-
-    engine = create_async_engine(TEST_DATABASE_URL, future=True)
     async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     yield engine
     await engine.dispose()
@@ -38,12 +33,12 @@ async def test_engine():
 @pytest_asyncio.fixture
 async def db(test_engine):
     Session = async_sessionmaker(test_engine, expire_on_commit=False)
-    async with Session() as session:
+    session = Session()
+    try:
         yield session
-    # Wipe all tables between tests (previous session may have committed).
-    async with test_engine.begin() as conn:
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(text(f'TRUNCATE "{table.name}" RESTART IDENTITY CASCADE'))
+    finally:
+        await session.rollback()
+        await session.close()
 
 
 @pytest_asyncio.fixture
