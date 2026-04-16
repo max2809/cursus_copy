@@ -10,6 +10,8 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    from studybuddy.auth.routes import router as auth_router
+
     settings = get_settings()
     app = FastAPI(title="Study Buddy", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
@@ -19,6 +21,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.include_router(auth_router)
 
     @app.get("/health")
     async def health():

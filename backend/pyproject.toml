@@ -11,6 +11,7 @@ dependencies = [
   "alembic==1.13.3",
   "pydantic==2.9.2",
   "pydantic-settings==2.5.2",
+  "email-validator==2.2.0",
   "httpx==0.27.2",
   "cryptography==43.0.1",
   "python-multipart==0.0.12",
