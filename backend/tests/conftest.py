@@ -53,3 +53,19 @@ async def client(db):
     app.dependency_overrides[get_db] = override_get_db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def authed_client(client, db):
+    """Client with a logged-in user."""
+    from studybuddy.db.models import User
+    from studybuddy.auth.session import create_session
+
+    user = User(email="u@eur.nl")
+    db.add(user)
+    await db.commit()
+
+    session_token = await create_session(db, user)
+    await db.commit()
+    client.cookies.set("sb_session", session_token)
+    return client
