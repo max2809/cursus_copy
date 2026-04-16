@@ -40,3 +40,29 @@ def test_wrong_nonce_fails():
     ciphertext, _ = encrypt_pat("x", KEY)
     with pytest.raises(Exception):
         decrypt_pat(ciphertext, os.urandom(12), KEY)
+
+
+from studybuddy.security.tokens import new_token, hash_token
+
+
+def test_new_token_is_url_safe_and_32_bytes_of_entropy():
+    t = new_token()
+    # Default: 32 bytes -> 43 chars base64url (no padding)
+    assert len(t) == 43
+    # URL-safe chars only
+    assert all(c.isalnum() or c in "-_" for c in t)
+
+
+def test_new_token_uniqueness():
+    assert new_token() != new_token()
+
+
+def test_hash_token_deterministic_and_32_bytes():
+    h1 = hash_token("abc")
+    h2 = hash_token("abc")
+    assert h1 == h2
+    assert len(h1) == 32  # SHA-256
+
+
+def test_hash_token_differs_for_different_input():
+    assert hash_token("a") != hash_token("b")
