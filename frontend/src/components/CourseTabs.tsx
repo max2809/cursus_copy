@@ -17,8 +17,8 @@ interface TabButtonProps {
 
 function TabButton({ active, label, count, muted, onClick }: TabButtonProps) {
   const base =
-    "shrink-0 inline-flex items-center gap-2 rounded-pill px-4 py-1.5 text-sm font-medium " +
-    "transition-all duration-150 ease-clay border";
+    "inline-flex items-center gap-2 rounded-pill px-4 py-1.5 text-sm font-medium " +
+    "transition-all duration-150 ease-clay border max-w-full";
   const style = active
     ? "bg-black text-white border-black"
     : `bg-white text-black border-oat hover:shadow-clay-hover ${muted ? "opacity-60" : ""}`;
@@ -26,16 +26,17 @@ function TabButton({ active, label, count, muted, onClick }: TabButtonProps) {
     <button
       type="button"
       onClick={onClick}
+      title={label}
       className={`${base} ${style}`}
       onMouseEnter={(e) => {
         if (!active) e.currentTarget.style.transform = "translateY(-1px) rotate(-0.5deg)";
       }}
       onMouseLeave={(e) => (e.currentTarget.style.transform = "")}
     >
-      <span>{label}</span>
+      <span className="truncate max-w-[22ch]">{label}</span>
       {count > 0 && (
         <span
-          className={`font-mono text-xs ${
+          className={`font-mono text-xs shrink-0 ${
             active ? "text-white/80" : "text-warmcharcoal"
           }`}
         >
@@ -49,7 +50,7 @@ function TabButton({ active, label, count, muted, onClick }: TabButtonProps) {
 export default function CourseTabs({ courses, activeCourseId, totalPending, onChange }: Props) {
   return (
     <div className="sticky top-[73px] z-[5] -mx-6 px-6 py-3 bg-cream/95 backdrop-blur border-b border-oat mb-8">
-      <div className="flex gap-2 overflow-x-auto no-scrollbar">
+      <div className="flex gap-2 flex-wrap">
         <TabButton
           active={activeCourseId === null}
           label="All"
@@ -60,7 +61,7 @@ export default function CourseTabs({ courses, activeCourseId, totalPending, onCh
           <TabButton
             key={entry.course.id}
             active={activeCourseId === entry.course.id}
-            label={entry.course.code ?? entry.course.name}
+            label={entry.course.name || entry.course.code || "Course"}
             count={entry.pending_count}
             muted={entry.pending_count === 0}
             onClick={() => onChange(entry.course.id)}

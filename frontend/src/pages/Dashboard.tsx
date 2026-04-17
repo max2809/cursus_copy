@@ -100,7 +100,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen">
       <header className="border-b border-oat sticky top-0 z-10 bg-cream/95 backdrop-blur">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <Logo />
           <nav className="flex items-center gap-2">
             <button
@@ -115,7 +115,7 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-8">
+      <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="mb-6">
           <span className="label-caps text-warmcharcoal">
             {showAll ? "Upcoming" : (activeCourse?.course.code ?? "Course")}
