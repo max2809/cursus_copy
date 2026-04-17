@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-cream text-black antialiased;
+    font-family: "Geist", Arial, sans-serif;
+    font-feature-settings: "ss01", "ss03";
+  }
+  h1, h2, h3, h4 {
+    font-feature-settings: "ss01", "ss03";
+  }
+  :focus-visible {
+    outline: 2px solid rgb(20, 110, 245);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* Clay-style button: transparent → tilts + lifts + hard offset shadow on hover */
+  .btn-clay {
+    @apply inline-flex items-center justify-center rounded-card px-4 py-2 text-base font-medium
+           bg-white text-black border border-oat shadow-clay
+           transition-all duration-200 ease-clay;
+  }
+  .btn-clay:hover {
+    @apply shadow-clay-hover;
+    transform: translateY(-2px) rotate(-2deg);
+  }
+  .btn-clay:active {
+    transform: translateY(0) rotate(0);
+  }
+
+  .btn-clay-primary {
+    @apply btn-clay bg-black text-white border-black;
+  }
+  .btn-clay-primary:hover {
+    @apply bg-ube-800 border-ube-800;
+  }
+
+  .btn-clay-ghost {
+    @apply inline-flex items-center justify-center rounded-sharp px-3 py-1.5 text-sm font-medium
+           bg-transparent text-black border border-warmcharcoal/50
+           transition-all duration-200 ease-clay;
+  }
+  .btn-clay-ghost:hover {
+    @apply bg-pomegranate-400 text-white border-pomegranate-400 shadow-clay-hover;
+    transform: translateY(-2px) rotate(-2deg);
+  }
+
+  /* Card: white on cream, oat border, multi-layer clay shadow */
+  .card-clay {
+    @apply bg-white rounded-card border border-oat shadow-clay p-6;
+  }
+  .card-feature {
+    @apply bg-white rounded-feature border border-oat shadow-clay p-8;
+  }
+  .card-dashed {
+    @apply bg-white rounded-card border border-oat border-dashed p-6;
+  }
+
+  /* Input: oat border, sharp radius, bold focus ring */
+  .input-clay {
+    @apply w-full rounded-sharp border border-warmcharcoal/60 bg-white px-3 py-2 text-black
+           placeholder:text-warmsilver;
+  }
+
+  /* Uppercase wayfinding label */
+  .label-caps {
+    @apply text-label text-warmcharcoal uppercase;
+  }
+}
