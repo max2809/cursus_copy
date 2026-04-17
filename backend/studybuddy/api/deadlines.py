@@ -53,12 +53,31 @@ async def get_deadlines(
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=RECENT_CUTOFF_DAYS)
     course_end_cutoff = date.today() - timedelta(days=COURSE_END_GRACE_DAYS)
+
+    # A course is "active" only if it has at least one dated deadline within
+    # the last 30 days or in the future. Courses whose only remaining items
+    # are null-due-at admin/resource rows get hidden, even if Canvas still
+    # reports them as active.
+    active_course_ids = (
+        select(Deadline.course_id)
+        .where(
+            Deadline.user_id == user.id,
+            Deadline.due_at.is_not(None),
+            Deadline.due_at >= cutoff,
+        )
+    )
+
     q = (
         select(Deadline, Course)
         .join(Course, Deadline.course_id == Course.id)
         .where(Deadline.user_id == user.id)
+        .where(Course.id.in_(active_course_ids))
+        # Within an active course, include recent dated items AND null-due items
+        # (so the "No due date" bucket still works for live courses).
         .where(or_(Deadline.due_at.is_(None), Deadline.due_at >= cutoff))
-        # Hide courses whose term clearly ended; keep courses with unknown end_date.
+        # Conservative belt-and-suspenders: if Canvas does set a clearly-past
+        # end_date, hide the course. EUR sets this to the whole year so it's
+        # usually a no-op here, but it catches odd cases.
         .where(or_(Course.end_date.is_(None), Course.end_date >= course_end_cutoff))
         .order_by(Deadline.due_at.asc().nullslast())
     )
