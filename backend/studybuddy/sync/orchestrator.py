@@ -1,10 +1,22 @@
 from datetime import datetime, timezone
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from studybuddy.canvas.classify import classify_deadline
 from studybuddy.canvas.client import CanvasClient, CanvasUnauthorized
 from studybuddy.db.models import Course, Deadline, File as FileModel, User
 from studybuddy.security.crypto import decrypt_pat
+
+
+async def _safe_get(client: CanvasClient, path: str, params: dict | None = None) -> list[dict]:
+    """Canvas returns 404 when a per-course feature (quizzes/files/etc.) is disabled.
+    Treat that as an empty collection so one disabled feature doesn't abort the sync."""
+    try:
+        return await client.get_paginated(path, params=params)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return []
+        raise
 
 
 async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> None:
@@ -33,22 +45,23 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> None:
 
     courses = (await db.execute(select(Course).where(Course.user_id == user.id))).scalars().all()
     for course in courses:
-        assignments = await client.get_paginated(f"/api/v1/courses/{course.canvas_course_id}/assignments")
+        assignments = await _safe_get(client, f"/api/v1/courses/{course.canvas_course_id}/assignments")
         for a in assignments:
             await _upsert_deadline(db, user.id, course.id, "assignment", a)
 
-        quizzes = await client.get_paginated(f"/api/v1/courses/{course.canvas_course_id}/quizzes")
+        quizzes = await _safe_get(client, f"/api/v1/courses/{course.canvas_course_id}/quizzes")
         for q in quizzes:
             await _upsert_deadline(db, user.id, course.id, "quiz", q)
 
-        events = await client.get_paginated(
+        events = await _safe_get(
+            client,
             "/api/v1/calendar_events",
             params={"context_codes[]": f"course_{course.canvas_course_id}", "type": "event"},
         )
         for e in events:
             await _upsert_deadline(db, user.id, course.id, "calendar_event", e)
 
-        files = await client.get_paginated(f"/api/v1/courses/{course.canvas_course_id}/files")
+        files = await _safe_get(client, f"/api/v1/courses/{course.canvas_course_id}/files")
         for f in files:
             await _upsert_file(db, user.id, course.id, f)
 
