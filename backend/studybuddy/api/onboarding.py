@@ -24,16 +24,24 @@ async def submit_pat(
     db: AsyncSession = Depends(get_db),
 ):
     settings = get_settings()
+    pat = payload.pat.strip()
+    print(
+        f"[onboarding] base_url={settings.canvas_base_url!r} "
+        f"pat_len={len(pat)} pat_has_tilde={'~' in pat}",
+        flush=True,
+    )
+
     async with httpx.AsyncClient(timeout=10.0) as c:
         resp = await c.get(
             f"https://{settings.canvas_base_url}/api/v1/users/self",
-            headers={"Authorization": f"Bearer {payload.pat}"},
+            headers={"Authorization": f"Bearer {pat}"},
         )
+    print(f"[onboarding] canvas status={resp.status_code}", flush=True)
     if resp.status_code == 401:
         raise HTTPException(status_code=400, detail="Canvas rejected that token")
     resp.raise_for_status()
 
-    ct, nonce = encrypt_pat(payload.pat, settings.master_key_bytes())
+    ct, nonce = encrypt_pat(pat, settings.master_key_bytes())
     user.pat_encrypted = ct
     user.pat_nonce = nonce
     await db.flush()
