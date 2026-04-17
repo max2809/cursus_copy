@@ -22,12 +22,12 @@ async def test_sync_inserts_courses_deadlines_files(db, httpx_mock):
 
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
         json=[{"id": 10, "name": "Algorithms", "course_code": "CS101"}],
     )
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses/10/assignments",
+        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission",
         json=[{"id": "a1", "name": "PS1", "due_at": "2026-05-01T12:00:00Z",
                "html_url": "https://canvas.eur.nl/c/10/a/1", "points_possible": 10.0}],
     )
@@ -69,12 +69,12 @@ async def test_sync_is_idempotent(db, httpx_mock):
     for _ in range(2):
         httpx_mock.add_response(
             method="GET",
-            url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active",
+            url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
             json=[{"id": 10, "name": "Algorithms"}],
         )
         httpx_mock.add_response(
             method="GET",
-            url="https://canvas.eur.nl/api/v1/courses/10/assignments",
+            url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission",
             json=[{"id": "a1", "name": "PS1", "due_at": "2026-05-01T12:00:00Z",
                    "html_url": "https://canvas.eur.nl/c/10/a/1"}],
         )
@@ -98,11 +98,12 @@ async def test_sync_401_clears_pat(db, httpx_mock):
     user = await _user_with_pat(db)
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
         status_code=401,
     )
     with pytest.raises(Exception):
         await sync_user(db, user, master_key=MASTER_KEY)
-    await db.refresh(user)
+    # sync_user flushes the cleared PAT in the same session before raising.
+    # The test shares that session, so in-memory state reflects the clear.
     assert user.pat_encrypted is None
     assert user.pat_nonce is None

@@ -19,7 +19,7 @@ async def test_onboarding_stores_encrypted_pat_and_syncs(authed_client, db, http
     )
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
         json=[],
     )
 

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
@@ -10,6 +12,8 @@ from studybuddy.db.base import get_db
 from studybuddy.db.models import User
 from studybuddy.email.resend_client import ResendClient
 
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -32,7 +36,12 @@ async def request_magic_link(payload: MagicLinkRequest, db: AsyncSession = Depen
     token = await create_magic_link(db, user)
     link = f"{settings.magic_link_base_url}/auth/verify?token={token}"
     resend = ResendClient(api_key=settings.resend_api_key, default_from=settings.resend_from)
-    await resend.send_magic_link(to=payload.email, link=link)
+    # Never let a Resend failure change the response: a 200 for unknown emails
+    # and a 500 for known emails would leak the allowlist. Log and swallow.
+    try:
+        await resend.send_magic_link(to=payload.email, link=link)
+    except Exception:
+        logger.exception("resend send_magic_link failed for an allowlisted user")
     await db.commit()
     return {"ok": True}
 

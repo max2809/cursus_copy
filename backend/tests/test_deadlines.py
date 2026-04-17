@@ -36,7 +36,9 @@ async def test_deadlines_returns_buckets(authed_client, db):
 
     resp = await authed_client.get("/api/deadlines")
     assert resp.status_code == 200
-    buckets = resp.json()["buckets"]
+    body = resp.json()
+    assert len(body["courses"]) == 1
+    buckets = body["courses"][0]["buckets"]
     titles = lambda b: [d["title"] for d in buckets[b]]
     assert "overdue_d" in titles("overdue")
     assert "today_d" in titles("today")
