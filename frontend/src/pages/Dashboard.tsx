@@ -1,9 +1,11 @@
-import { useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useEffect, useMemo } from "react";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useDeadlines, useSync } from "../api/queries";
-import CourseSection from "../components/CourseSection";
+import BucketRow, { BUCKET_CONFIG } from "../components/BucketRow";
+import CourseTabs from "../components/CourseTabs";
 import Logo from "../components/Logo";
 import { ApiError } from "../api/client";
+import type { BucketKey, CourseDeadlines, Deadline, DeadlineCourse } from "../api/types";
 
 function lastSynced(iso: string | null): string {
   if (!iso) return "never";
@@ -15,8 +17,17 @@ function lastSynced(iso: string | null): string {
   return `${Math.round(h / 24)}d ago`;
 }
 
+function emptyBuckets(): Record<BucketKey, Deadline[]> {
+  return {
+    overdue: [], today: [], this_week: [],
+    next_two_weeks: [], later: [], no_due_date: [],
+  };
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeCourseId = searchParams.get("course");
   const { data, isLoading, error, refetch } = useDeadlines();
   const sync = useSync();
 
@@ -25,6 +36,31 @@ export default function Dashboard() {
       navigate("/login", { replace: true });
     }
   }, [error, navigate]);
+
+  // Build "All" view aggregate and a deadline->course lookup.
+  const { allBuckets, courseByDeadline } = useMemo(() => {
+    const buckets = emptyBuckets();
+    const map = new Map<string, DeadlineCourse>();
+    if (!data) return { allBuckets: buckets, courseByDeadline: map };
+    for (const entry of data.courses) {
+      for (const key of Object.keys(buckets) as BucketKey[]) {
+        for (const d of entry.buckets[key]) {
+          buckets[key].push(d);
+          map.set(d.id, entry.course);
+        }
+      }
+    }
+    // Within each bucket, sort by due_at ascending (nulls last).
+    for (const key of Object.keys(buckets) as BucketKey[]) {
+      buckets[key].sort((a, b) => {
+        if (!a.due_at && !b.due_at) return 0;
+        if (!a.due_at) return 1;
+        if (!b.due_at) return -1;
+        return a.due_at.localeCompare(b.due_at);
+      });
+    }
+    return { allBuckets: buckets, courseByDeadline: map };
+  }, [data]);
 
   if (isLoading) {
     return (
@@ -50,6 +86,16 @@ export default function Dashboard() {
 
   const courses = data.courses;
   const totalPending = courses.reduce((n, c) => n + c.pending_count, 0);
+  const activeCourse: CourseDeadlines | null =
+    activeCourseId ? courses.find((c) => c.course.id === activeCourseId) ?? null : null;
+
+  // If the query param points at a course that no longer exists, fall back to All.
+  const showAll = !activeCourse;
+
+  const onTabChange = (courseId: string | null) => {
+    if (courseId === null) setSearchParams({});
+    else setSearchParams({ course: courseId });
+  };
 
   return (
     <div className="min-h-screen">
@@ -69,18 +115,29 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-10">
-        <div className="mb-10">
-          <span className="label-caps text-warmcharcoal">Upcoming</span>
+      <main className="max-w-4xl mx-auto px-6 py-8">
+        <div className="mb-6">
+          <span className="label-caps text-warmcharcoal">
+            {showAll ? "Upcoming" : (activeCourse?.course.code ?? "Course")}
+          </span>
           <h1 className="text-display-2 mt-2">
-            {totalPending === 0 ? "Clear decks." : `${totalPending} pending.`}
+            {showAll
+              ? (totalPending === 0 ? "Clear decks." : `${totalPending} pending.`)
+              : activeCourse?.course.name}
           </h1>
           <p className="mt-2 text-warmcharcoal font-mono text-sm">
-            {courses.length} active course{courses.length === 1 ? "" : "s"}
-            {" · last synced "}{lastSynced(data.last_synced_at)}
-            {" · Europe/Amsterdam"}
+            {showAll
+              ? `${courses.length} active course${courses.length === 1 ? "" : "s"} · last synced ${lastSynced(data.last_synced_at)}`
+              : `${activeCourse?.pending_count ?? 0} pending in this course · last synced ${lastSynced(data.last_synced_at)}`}
           </p>
         </div>
+
+        <CourseTabs
+          courses={courses}
+          activeCourseId={activeCourse ? activeCourse.course.id : null}
+          totalPending={totalPending}
+          onChange={onTabChange}
+        />
 
         {courses.length === 0 ? (
           <div className="rounded-feature border border-oat border-dashed bg-white p-10 text-center">
@@ -91,9 +148,24 @@ export default function Dashboard() {
               Hit Refresh if you think Canvas has new deadlines.
             </p>
           </div>
+        ) : showAll ? (
+          BUCKET_CONFIG.map(({ key, label, accent }) => (
+            <BucketRow
+              key={key}
+              label={label}
+              accent={accent}
+              items={allBuckets[key]}
+              getCourseCode={(d) => courseByDeadline.get(d.id)?.code ?? null}
+            />
+          ))
         ) : (
-          courses.map((entry) => (
-            <CourseSection key={entry.course.id} entry={entry} />
+          BUCKET_CONFIG.map(({ key, label, accent }) => (
+            <BucketRow
+              key={key}
+              label={label}
+              accent={accent}
+              items={activeCourse!.buckets[key]}
+            />
           ))
         )}
       </main>

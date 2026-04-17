@@ -9,7 +9,12 @@ const typeLabel: Record<string, string> = {
   other: "Item",
 };
 
-export default function DeadlineItem({ d }: { d: Deadline }) {
+interface Props {
+  d: Deadline;
+  courseCode?: string | null;
+}
+
+export default function DeadlineItem({ d, courseCode }: Props) {
   const submitted = d.submitted === true;
   return (
     <a
@@ -25,7 +30,12 @@ export default function DeadlineItem({ d }: { d: Deadline }) {
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <div className="label-caps mb-1 text-warmcharcoal flex items-center gap-2">
+          <div className="label-caps mb-1 text-warmcharcoal flex items-center gap-2 flex-wrap">
+            {courseCode && (
+              <span className="inline-flex items-center rounded-sharp bg-cream border border-oat px-1.5 py-[1px] font-mono text-[10px] text-black normal-case tracking-normal">
+                {courseCode}
+              </span>
+            )}
             <span>{typeLabel[d.type] ?? "Item"}</span>
             {submitted && (
               <span className="inline-flex items-center rounded-pill bg-matcha-300 px-2 py-[1px] text-[10px] text-black normal-case tracking-normal">
