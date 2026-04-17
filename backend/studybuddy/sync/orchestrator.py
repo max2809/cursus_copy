@@ -9,12 +9,12 @@ from studybuddy.security.crypto import decrypt_pat
 
 
 async def _safe_get(client: CanvasClient, path: str, params: dict | None = None) -> list[dict]:
-    """Canvas returns 404 when a per-course feature (quizzes/files/etc.) is disabled.
-    Treat that as an empty collection so one disabled feature doesn't abort the sync."""
+    """Canvas returns 404 (feature disabled) or 403 (student lacks permission) on
+    optional per-course resources. Treat as empty so one gap doesn't abort the sync."""
     try:
         return await client.get_paginated(path, params=params)
     except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
+        if e.response.status_code in (403, 404):
             return []
         raise
 
