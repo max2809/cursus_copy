@@ -70,7 +70,7 @@ export default {
       },
       boxShadow: {
         clay: "0 1px 1px rgba(0,0,0,0.1), inset 0 -1px 1px rgba(0,0,0,0.04), 0 -0.5px 1px rgba(0,0,0,0.05)",
-        "clay-hover": "-7px 7px 0 rgb(0,0,0)",
+        "clay-hover": "-4px 4px 0 rgb(0,0,0)",
       },
       transitionTimingFunction: {
         clay: "cubic-bezier(0.2, 0.8, 0.2, 1)",
