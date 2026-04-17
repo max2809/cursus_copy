@@ -14,7 +14,6 @@ export interface Deadline {
   url: string;
   points_possible: number | null;
   submitted: boolean | null;
-  course: DeadlineCourse | null;
 }
 
 export type BucketKey =
@@ -25,7 +24,13 @@ export type BucketKey =
   | "later"
   | "no_due_date";
 
-export interface DeadlinesResponse {
+export interface CourseDeadlines {
+  course: DeadlineCourse;
   buckets: Record<BucketKey, Deadline[]>;
+  pending_count: number;
+}
+
+export interface DeadlinesResponse {
+  courses: CourseDeadlines[];
   last_synced_at: string | null;
 }

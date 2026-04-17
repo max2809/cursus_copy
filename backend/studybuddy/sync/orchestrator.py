@@ -45,7 +45,11 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> None:
 
     courses = (await db.execute(select(Course).where(Course.user_id == user.id))).scalars().all()
     for course in courses:
-        assignments = await _safe_get(client, f"/api/v1/courses/{course.canvas_course_id}/assignments")
+        assignments = await _safe_get(
+            client,
+            f"/api/v1/courses/{course.canvas_course_id}/assignments",
+            params={"include[]": "submission"},
+        )
         for a in assignments:
             await _upsert_deadline(db, user.id, course.id, "assignment", a)
 
@@ -107,6 +111,15 @@ async def _upsert_deadline(db: AsyncSession, user_id, course_id, source_type: st
     dtype = classify_deadline(source_type, payload)
     description = payload.get("description")
 
+    # Per-user submission state (only meaningful for assignments).
+    # `include[]=submission` on /assignments returns a `submission` object for the current user.
+    submitted: bool | None = None
+    if source_type == "assignment":
+        submission = payload.get("submission") or {}
+        submitted_at = submission.get("submitted_at")
+        workflow = submission.get("workflow_state")
+        submitted = bool(submitted_at) or workflow in ("submitted", "graded", "complete")
+
     if existing is None:
         db.add(Deadline(
             user_id=user_id,
@@ -119,7 +132,7 @@ async def _upsert_deadline(db: AsyncSession, user_id, course_id, source_type: st
             url=url,
             type=dtype,
             points_possible=payload.get("points_possible"),
-            submitted=(payload.get("has_submitted_submissions") if source_type == "assignment" else None),
+            submitted=submitted,
             synced_at=datetime.now(timezone.utc),
         ))
     else:
@@ -130,7 +143,7 @@ async def _upsert_deadline(db: AsyncSession, user_id, course_id, source_type: st
         existing.type = dtype
         existing.points_possible = payload.get("points_possible")
         if source_type == "assignment":
-            existing.submitted = payload.get("has_submitted_submissions")
+            existing.submitted = submitted
         existing.synced_at = datetime.now(timezone.utc)
 
 

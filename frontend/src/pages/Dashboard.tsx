@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useDeadlines, useSync } from "../api/queries";
-import DeadlineBucket from "../components/DeadlineBucket";
+import CourseSection from "../components/CourseSection";
 import Logo from "../components/Logo";
 import { ApiError } from "../api/client";
 
@@ -39,7 +39,7 @@ export default function Dashboard() {
   if (error || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="card-feature max-w-md text-center">
+        <div className="rounded-feature border border-oat bg-white shadow-clay p-8 max-w-md text-center">
           <span className="label-caps text-pomegranate-400">Failed to load</span>
           <p className="mt-3 text-warmcharcoal">{String(error)}</p>
           <button onClick={() => refetch()} className="btn-clay mt-6">Try again</button>
@@ -48,10 +48,8 @@ export default function Dashboard() {
     );
   }
 
-  const b = data.buckets;
-  const totalCount =
-    b.overdue.length + b.today.length + b.this_week.length +
-    b.next_two_weeks.length + b.later.length + b.no_due_date.length;
+  const courses = data.courses;
+  const totalPending = courses.reduce((n, c) => n + c.pending_count, 0);
 
   return (
     <div className="min-h-screen">
@@ -75,30 +73,28 @@ export default function Dashboard() {
         <div className="mb-10">
           <span className="label-caps text-warmcharcoal">Upcoming</span>
           <h1 className="text-display-2 mt-2">
-            {totalCount === 0 ? "Clear decks." : `${totalCount} on deck.`}
+            {totalPending === 0 ? "Clear decks." : `${totalPending} pending.`}
           </h1>
           <p className="mt-2 text-warmcharcoal font-mono text-sm">
-            Last synced {lastSynced(data.last_synced_at)}
-            {" · "}
-            Europe/Amsterdam
+            {courses.length} active course{courses.length === 1 ? "" : "s"}
+            {" · last synced "}{lastSynced(data.last_synced_at)}
+            {" · Europe/Amsterdam"}
           </p>
         </div>
 
-        <DeadlineBucket label="Overdue" items={b.overdue} tone="urgent" />
-        <DeadlineBucket label="Today" items={b.today} tone="today" />
-        <DeadlineBucket label="This week" items={b.this_week} tone="week" />
-        <DeadlineBucket label="Next two weeks" items={b.next_two_weeks} tone="neutral" />
-        <DeadlineBucket label="Later" items={b.later} tone="later" />
-        <DeadlineBucket label="No due date" items={b.no_due_date} tone="muted" />
-
-        {totalCount === 0 && (
-          <div className="card-dashed text-center py-12">
-            <span className="label-caps text-matcha-600">Nothing due</span>
-            <p className="mt-3 text-card">Enjoy it while it lasts.</p>
-            <p className="mt-2 text-warmcharcoal">
-              Hit Refresh if you think Canvas has new items.
+        {courses.length === 0 ? (
+          <div className="rounded-feature border border-oat border-dashed bg-white p-10 text-center">
+            <span className="label-caps text-matcha-600">Nothing to show</span>
+            <p className="mt-3 text-card">All caught up across every course.</p>
+            <p className="mt-2 text-warmcharcoal text-sm">
+              Past-semester items are hidden. Submitted assignments show greyed-out within each course.
+              Hit Refresh if you think Canvas has new deadlines.
             </p>
           </div>
+        ) : (
+          courses.map((entry) => (
+            <CourseSection key={entry.course.id} entry={entry} />
+          ))
         )}
       </main>
     </div>
