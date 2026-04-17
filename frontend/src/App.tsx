@@ -1,11 +1,19 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import Login from "./pages/Login";
+import AuthVerify from "./pages/AuthVerify";
+import Onboarding from "./pages/Onboarding";
+import Dashboard from "./pages/Dashboard";
+import Settings from "./pages/Settings";
+
 export default function App() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-8">
-      <div className="card-feature max-w-md text-center">
-        <p className="label-caps mb-3">Placeholder</p>
-        <h1 className="text-card mb-2">Study Buddy</h1>
-        <p className="text-warmcharcoal">Routing + pages arrive in the next task.</p>
-      </div>
-    </div>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/auth/verify" element={<AuthVerify />} />
+      <Route path="/onboarding" element={<Onboarding />} />
+      <Route path="/" element={<Dashboard />} />
+      <Route path="/settings" element={<Settings />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
