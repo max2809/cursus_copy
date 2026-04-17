@@ -32,7 +32,8 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> None:
 
     try:
         courses_payload = await client.get_paginated(
-            "/api/v1/courses", params={"enrollment_state": "active"}
+            "/api/v1/courses",
+            params={"enrollment_state": "active", "include[]": "term"},
         )
     except CanvasUnauthorized:
         user.pat_encrypted = None
@@ -73,21 +74,45 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> None:
     await db.flush()
 
 
+def _course_dates(payload: dict):
+    """Pull start/end dates from the course itself or fall through to its term.
+    Canvas often leaves end_at null on the course object but populated on term.end_at."""
+    term = payload.get("term") if isinstance(payload.get("term"), dict) else {}
+    start_raw = payload.get("start_at") or term.get("start_at")
+    end_raw = payload.get("end_at") or term.get("end_at")
+
+    def _to_date(raw):
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+        except Exception:
+            return None
+
+    return _to_date(start_raw), _to_date(end_raw)
+
+
 async def _upsert_course(db: AsyncSession, user_id, payload: dict) -> None:
     existing = (await db.execute(
         select(Course).where(Course.user_id == user_id, Course.canvas_course_id == payload["id"])
     )).scalar_one_or_none()
+    start_date, end_date = _course_dates(payload)
     if existing is None:
         db.add(Course(
             user_id=user_id,
             canvas_course_id=payload["id"],
             name=payload.get("name") or "(unnamed)",
             code=payload.get("course_code"),
+            start_date=start_date,
+            end_date=end_date,
             synced_at=datetime.now(timezone.utc),
         ))
     else:
         existing.name = payload.get("name") or existing.name
         existing.code = payload.get("course_code") or existing.code
+        # Always refresh dates so a term update in Canvas propagates.
+        existing.start_date = start_date
+        existing.end_date = end_date
         existing.synced_at = datetime.now(timezone.utc)
     await db.flush()
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends
 from sqlalchemy import or_, select
@@ -17,6 +17,9 @@ STALE_MINUTES = 30
 # Don't show deadlines older than this — hides items from past semesters
 # whose courses Canvas still reports as "active."
 RECENT_CUTOFF_DAYS = 30
+# Hide courses whose term ended more than this many days ago. A small grace
+# window lets resits / late-graded items still surface.
+COURSE_END_GRACE_DAYS = 14
 AMS = ZoneInfo("Europe/Amsterdam")
 BUCKET_ORDER = ("overdue", "today", "this_week", "next_two_weeks", "later", "no_due_date")
 
@@ -49,11 +52,14 @@ async def get_deadlines(
             await db.rollback()
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=RECENT_CUTOFF_DAYS)
+    course_end_cutoff = date.today() - timedelta(days=COURSE_END_GRACE_DAYS)
     q = (
         select(Deadline, Course)
         .join(Course, Deadline.course_id == Course.id)
         .where(Deadline.user_id == user.id)
         .where(or_(Deadline.due_at.is_(None), Deadline.due_at >= cutoff))
+        # Hide courses whose term clearly ended; keep courses with unknown end_date.
+        .where(or_(Course.end_date.is_(None), Course.end_date >= course_end_cutoff))
         .order_by(Deadline.due_at.asc().nullslast())
     )
     rows = (await db.execute(q)).all()
