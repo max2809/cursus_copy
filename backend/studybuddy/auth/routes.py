@@ -47,12 +47,15 @@ async def verify(payload: VerifyRequest, response: Response, db: AsyncSession = 
 
     settings = get_settings()
     next_path = "/onboarding" if user.pat_encrypted is None else "/"
+    # samesite=none required for cross-site POSTs (Vercel frontend -> Railway backend).
+    # samesite=none requires secure=true; fall back to lax for local dev (http).
+    samesite = "none" if settings.cookie_secure else "lax"
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_token,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="lax",
+        samesite=samesite,
         max_age=60 * 60 * 24 * 30,
     )
     return {"next": next_path}
