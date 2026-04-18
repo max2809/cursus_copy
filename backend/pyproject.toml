@@ -18,6 +18,12 @@ dependencies = [
   "python-multipart==0.0.12",
   "itsdangerous==2.2.0",
   "typer==0.12.5",
+  "markitdown>=0.0.2",
+  "tiktoken>=0.7",
+  "voyageai>=0.2",
+  "anthropic>=0.40",
+  "trafilatura>=1.12",
+  "sse-starlette>=2.1",
 ]
 
 [project.optional-dependencies]

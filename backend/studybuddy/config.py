@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     canvas_base_url: str = "canvas.eur.nl"
     cookie_secure: bool = False  # set True in production (HTTPS only)
 
+    # RAG / chat
+    voyage_api_key: str = ""
+    anthropic_api_key: str = ""
+    rag_chunk_tokens: int = 800
+    rag_chunk_overlap: int = 100
+    rag_top_k_recall: int = 20
+    rag_top_k_rerank: int = 5
+    rag_max_upload_mb: int = 50
+    rag_claude_model: str = "claude-sonnet-4-6"
+
     def master_key_bytes(self) -> bytes:
         raw = base64.b64decode(self.studybuddy_master_key)
         if len(raw) != 32:
