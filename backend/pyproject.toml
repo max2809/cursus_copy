@@ -24,6 +24,7 @@ dependencies = [
   "anthropic>=0.40",
   "trafilatura>=1.12",
   "sse-starlette>=2.1",
+  "pgvector>=0.3.0",
 ]
 
 [project.optional-dependencies]
