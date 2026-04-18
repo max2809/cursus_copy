@@ -6,23 +6,39 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiFetchOptions extends RequestInit {
+  /** Set to false to skip response.json() (for 204 / non-JSON responses). */
+  parseJson?: boolean;
+}
+
 export async function apiFetch<T>(
   path: string,
-  init?: RequestInit
+  opts?: ApiFetchOptions,
 ): Promise<T> {
+  const { parseJson = true, headers, body, ...init } = opts ?? {};
+  // Only default to JSON content-type when the body is a string (not FormData, etc.).
+  const defaultHeaders: Record<string, string> = {};
+  if (typeof body === "string") {
+    defaultHeaders["Content-Type"] = "application/json";
+  }
   const resp = await fetch(`${BASE}${path}`, {
     credentials: "include",
     headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
+      ...defaultHeaders,
+      ...(headers ?? {}),
     },
+    body,
     ...init,
   });
   if (!resp.ok) {
-    let body: unknown = null;
-    try { body = await resp.json(); } catch { /* ignore */ }
-    throw new ApiError(resp.status, body);
+    let errBody: unknown = null;
+    try {
+      errBody = await resp.json();
+    } catch {
+      /* ignore */
+    }
+    throw new ApiError(resp.status, errBody);
   }
-  if (resp.status === 204) return undefined as T;
+  if (!parseJson || resp.status === 204) return undefined as T;
   return (await resp.json()) as T;
 }

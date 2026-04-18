@@ -34,3 +34,55 @@ export interface DeadlinesResponse {
   courses: CourseDeadlines[];
   last_synced_at: string | null;
 }
+
+export type MaterialSource = "canvas" | "upload" | "url";
+
+export interface MaterialItem {
+  id: string;
+  filename: string;
+  source: MaterialSource;
+  source_url: string | null;
+  size_bytes: number | null;
+  content_type: string | null;
+  indexed_at: string | null;
+  index_error: string | null;
+  updated_at: string | null;
+}
+
+export interface MaterialsListResponse {
+  materials: MaterialItem[];
+}
+
+export interface Citation {
+  marker: number;
+  chunk_id: string | null;
+  file_id: string | null;
+  deadline_id: string | null;
+  page_hint: number | null;
+  heading_path: string | null;
+  snippet: string;
+}
+
+export interface ChatMessageItem {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations_json: Citation[] | null;
+  error: boolean;
+  created_at: string;
+}
+
+export interface SessionSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionDetail extends SessionSummary {
+  messages: ChatMessageItem[];
+}
+
+export interface SessionListResponse {
+  sessions: SessionSummary[];
+}
