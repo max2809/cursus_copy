@@ -14,6 +14,7 @@ def create_app() -> FastAPI:
     from studybuddy.api.onboarding import router as onboarding_router
     from studybuddy.api.deadlines import router as deadlines_router
     from studybuddy.api.sync_route import router as sync_router
+    from studybuddy.api.materials import router as materials_router
 
     settings = get_settings()
     app = FastAPI(title="Study Buddy", version="0.1.0", lifespan=lifespan)
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(deadlines_router)
     app.include_router(sync_router)
+    app.include_router(materials_router)
 
     @app.get("/health")
     async def health():

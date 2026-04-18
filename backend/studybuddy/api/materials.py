@@ -1,0 +1,241 @@
+"""Materials endpoints: list / upload / url / delete / refresh."""
+from __future__ import annotations
+from datetime import datetime, timezone
+from typing import Literal
+from urllib.parse import unquote, urlparse
+from uuid import UUID
+
+from fastapi import (
+    APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status,
+)
+from pydantic import BaseModel
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from studybuddy.auth.deps import current_user
+from studybuddy.chat.deps import get_embedder, resolve_course
+from studybuddy.config import get_settings
+from studybuddy.db.base import get_db
+from studybuddy.db.models import Chunk, File as FileModel, User
+from studybuddy.rag.indexer import index_file, index_upload_bytes
+from studybuddy.security.crypto import decrypt_pat
+from studybuddy.sync.orchestrator import sync_user
+
+
+router = APIRouter(prefix="/api/courses/{canvas_course_id}/materials", tags=["materials"])
+
+
+_UPLOAD_MIME_ALLOW = {
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/plain",
+    "text/markdown",
+    "text/x-markdown",
+}
+
+
+class MaterialResponse(BaseModel):
+    id: UUID
+    filename: str
+    source: Literal["canvas", "upload", "url"]
+    source_url: str | None = None
+    size_bytes: int | None = None
+    content_type: str | None = None
+    indexed_at: datetime | None = None
+    index_error: str | None = None
+    updated_at: datetime | None = None
+
+
+class MaterialsListResponse(BaseModel):
+    materials: list[MaterialResponse]
+
+
+class AddUrlPayload(BaseModel):
+    url: str
+
+
+@router.get("", response_model=MaterialsListResponse)
+async def list_materials(
+    canvas_course_id: int,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MaterialsListResponse:
+    course = await resolve_course(db, user=user, canvas_course_id=canvas_course_id)
+    rows = (await db.execute(
+        select(FileModel)
+        .where(FileModel.course_id == course.id, FileModel.deleted_at.is_(None))
+        .order_by(
+            # canvas < upload < url so Canvas sorts first lexically; we want same.
+            FileModel.source.asc(),
+            FileModel.filename.asc(),
+        )
+    )).scalars().all()
+    return MaterialsListResponse(
+        materials=[MaterialResponse(
+            id=r.id, filename=r.filename, source=r.source,
+            source_url=r.source_url, size_bytes=r.size_bytes,
+            content_type=r.content_type, indexed_at=r.indexed_at,
+            index_error=r.index_error, updated_at=r.updated_at,
+        ) for r in rows]
+    )
+
+
+@router.post("", response_model=MaterialResponse)
+async def upload_material(
+    canvas_course_id: int,
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MaterialResponse:
+    course = await resolve_course(db, user=user, canvas_course_id=canvas_course_id)
+    settings = get_settings()
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in _UPLOAD_MIME_ALLOW:
+        raise HTTPException(status_code=415, detail=f"unsupported content_type: {content_type!r}")
+
+    raw = await file.read()
+    if len(raw) == 0:
+        raise HTTPException(status_code=400, detail="empty upload")
+    if len(raw) > settings.rag_max_upload_mb * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="file exceeds upload cap")
+
+    row = FileModel(
+        user_id=user.id, course_id=course.id,
+        filename=file.filename or "(untitled)",
+        content_type=content_type,
+        url="",  # no canvas-side URL for uploads
+        size_bytes=len(raw),
+        source="upload",
+        uploaded_at=datetime.now(timezone.utc),
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+
+    embedder = get_embedder()
+    background.add_task(
+        index_upload_bytes,
+        db,
+        user=user,
+        file_id=row.id,
+        raw=raw,
+        content_type=content_type,
+        filename=row.filename,
+        voyage_embedder=embedder,
+        chunk_tokens=settings.rag_chunk_tokens,
+        chunk_overlap=settings.rag_chunk_overlap,
+    )
+    return _to_response(row)
+
+
+@router.post("/url", response_model=MaterialResponse)
+async def add_url_material(
+    canvas_course_id: int,
+    payload: AddUrlPayload,
+    background: BackgroundTasks,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MaterialResponse:
+    course = await resolve_course(db, user=user, canvas_course_id=canvas_course_id)
+    parsed = urlparse(payload.url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise HTTPException(status_code=400, detail="url must be http(s) with a hostname")
+
+    filename = unquote(parsed.path.rsplit("/", 1)[-1]) or parsed.hostname
+    settings = get_settings()
+    row = FileModel(
+        user_id=user.id, course_id=course.id,
+        filename=filename,
+        content_type=None,  # determined at fetch time
+        url=payload.url,
+        source="url",
+        source_url=payload.url,
+        uploaded_at=datetime.now(timezone.utc),
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+
+    embedder = get_embedder()
+    background.add_task(
+        index_file,
+        db,
+        user=user,
+        file_id=row.id,
+        voyage_embedder=embedder,
+        pat=None,
+        canvas_base_url=user.canvas_base_url,
+        max_bytes=settings.rag_max_upload_mb * 1024 * 1024,
+        chunk_tokens=settings.rag_chunk_tokens,
+        chunk_overlap=settings.rag_chunk_overlap,
+    )
+    return _to_response(row)
+
+
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_material(
+    canvas_course_id: int,
+    file_id: UUID,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await resolve_course(db, user=user, canvas_course_id=canvas_course_id)
+    row = (await db.execute(
+        select(FileModel).where(
+            FileModel.id == file_id,
+            FileModel.course_id == course.id,
+            FileModel.user_id == user.id,
+        )
+    )).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="material not found")
+    if row.source == "canvas":
+        raise HTTPException(status_code=400, detail="cannot delete canvas-synced materials")
+    await db.execute(delete(Chunk).where(Chunk.file_id == row.id))
+    await db.delete(row)
+    await db.commit()
+
+
+@router.post("/refresh", response_model=MaterialsListResponse)
+async def refresh_materials(
+    canvas_course_id: int,
+    background: BackgroundTasks,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MaterialsListResponse:
+    settings = get_settings()
+    if user.pat_encrypted is None or user.pat_nonce is None:
+        raise HTTPException(status_code=400, detail="connect your Canvas PAT first")
+    await resolve_course(db, user=user, canvas_course_id=canvas_course_id)
+
+    result = await sync_user(db, user, master_key=settings.master_key_bytes())
+    await db.commit()
+
+    pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
+    embedder = get_embedder()
+    for fid in result.pending_file_ids:
+        background.add_task(
+            index_file,
+            db,
+            user=user,
+            file_id=fid,
+            voyage_embedder=embedder,
+            pat=pat,
+            canvas_base_url=user.canvas_base_url,
+            max_bytes=settings.rag_max_upload_mb * 1024 * 1024,
+            chunk_tokens=settings.rag_chunk_tokens,
+            chunk_overlap=settings.rag_chunk_overlap,
+        )
+    return await list_materials(canvas_course_id=canvas_course_id, user=user, db=db)
+
+
+def _to_response(r: FileModel) -> MaterialResponse:
+    return MaterialResponse(
+        id=r.id, filename=r.filename, source=r.source,
+        source_url=r.source_url, size_bytes=r.size_bytes,
+        content_type=r.content_type, indexed_at=r.indexed_at,
+        index_error=r.index_error, updated_at=r.updated_at,
+    )
