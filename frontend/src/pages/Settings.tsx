@@ -79,7 +79,7 @@ export default function Settings() {
             }}
             className="btn-clay"
           >
-            Sign out of Study Buddy
+            Sign out of Cursus
           </button>
         </section>
       </main>

@@ -10,9 +10,9 @@ class ResendClient:
         self._from = default_from
 
     async def send_magic_link(self, to: str, link: str) -> dict:
-        subject = "Your Study Buddy login link"
+        subject = "Your Cursus login link"
         html = f"""
-        <p>Click the link below to sign in to Study Buddy. It expires in 15 minutes.</p>
+        <p>Click the link below to sign in to Cursus. It expires in 15 minutes.</p>
         <p><a href="{link}">{link}</a></p>
         <p>If you didn't request this, you can ignore this email.</p>
         """

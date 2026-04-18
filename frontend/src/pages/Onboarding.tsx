@@ -49,7 +49,7 @@ export default function Onboarding() {
               </li>
               <li>Scroll to <span className="font-medium">Approved Integrations</span></li>
               <li>Click <span className="font-medium">+ New Access Token</span></li>
-              <li>Name it "Study Buddy" and leave the expiry empty</li>
+              <li>Name it "Cursus" and leave the expiry empty</li>
               <li>Copy the token (you can only see it once) and paste it below</li>
             </ol>
 

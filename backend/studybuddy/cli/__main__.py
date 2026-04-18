@@ -4,7 +4,7 @@ from studybuddy.cli.commands import invite_email
 from studybuddy.db.base import AsyncSessionLocal
 
 
-app = typer.Typer(help="Study Buddy admin CLI")
+app = typer.Typer(help="Cursus admin CLI")
 
 
 @app.command()

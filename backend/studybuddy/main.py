@@ -19,7 +19,7 @@ def create_app() -> FastAPI:
     from studybuddy.api.chat_messages import router as chat_messages_router
 
     settings = get_settings()
-    app = FastAPI(title="Study Buddy", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Cursus", version="0.1.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[settings.frontend_origin],

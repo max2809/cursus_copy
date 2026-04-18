@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     studybuddy_master_key: str = ""
     session_signing_key: str = ""
     resend_api_key: str = ""
-    resend_from: str = "Study Buddy <noreply@studybuddy.app>"
+    resend_from: str = "Cursus <noreply@cursus.me>"
     magic_link_base_url: str = "http://localhost:5173"
     frontend_origin: str = "http://localhost:5173"
     canvas_base_url: str = "canvas.eur.nl"
