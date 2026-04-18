@@ -3,8 +3,10 @@ import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useDeadlines, useSync } from "../api/queries";
 import BucketRow, { BUCKET_CONFIG } from "../components/BucketRow";
 import CourseTabs from "../components/CourseTabs";
+import { CourseSubTabs, type SubTabKey } from "../components/CourseSubTabs";
 import Logo from "../components/Logo";
 import { ApiError } from "../api/client";
+import { isChatFeatureEnabled } from "../lib/featureFlags";
 import type { BucketKey, CourseDeadlines, Deadline, DeadlineCourse } from "../api/types";
 
 function lastSynced(iso: string | null): string {
@@ -28,8 +30,16 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeCourseId = searchParams.get("course");
+  const chatEnabled = isChatFeatureEnabled();
+  const view: SubTabKey = (searchParams.get("view") as SubTabKey) || "deadlines";
   const { data, isLoading, error, refetch } = useDeadlines();
   const sync = useSync();
+
+  function setView(next: SubTabKey) {
+    const sp = new URLSearchParams(searchParams);
+    sp.set("view", next);
+    setSearchParams(sp);
+  }
 
   useEffect(() => {
     if (error instanceof ApiError && error.status === 401) {
@@ -139,34 +149,52 @@ export default function Dashboard() {
           onChange={onTabChange}
         />
 
-        {courses.length === 0 ? (
-          <div className="rounded-feature border border-oat border-dashed bg-white p-10 text-center">
-            <span className="label-caps text-matcha-600">Nothing to show</span>
-            <p className="mt-3 text-card">All caught up across every course.</p>
-            <p className="mt-2 text-warmcharcoal text-sm">
-              Past-semester items are hidden. Submitted assignments show greyed-out within each course.
-              Hit Refresh if you think Canvas has new deadlines.
-            </p>
+        {activeCourseId && chatEnabled && (
+          <CourseSubTabs active={view} onChange={setView} chatEnabled={chatEnabled} />
+        )}
+
+        {view === "deadlines" && (
+          courses.length === 0 ? (
+            <div className="rounded-feature border border-oat border-dashed bg-white p-10 text-center">
+              <span className="label-caps text-matcha-600">Nothing to show</span>
+              <p className="mt-3 text-card">All caught up across every course.</p>
+              <p className="mt-2 text-warmcharcoal text-sm">
+                Past-semester items are hidden. Submitted assignments show greyed-out within each course.
+                Hit Refresh if you think Canvas has new deadlines.
+              </p>
+            </div>
+          ) : showAll ? (
+            BUCKET_CONFIG.map(({ key, label, accent }) => (
+              <BucketRow
+                key={key}
+                label={label}
+                accent={accent}
+                items={allBuckets[key]}
+                getCourseCode={(d) => courseByDeadline.get(d.id)?.code ?? null}
+              />
+            ))
+          ) : (
+            BUCKET_CONFIG.map(({ key, label, accent }) => (
+              <BucketRow
+                key={key}
+                label={label}
+                accent={accent}
+                items={activeCourse!.buckets[key]}
+              />
+            ))
+          )
+        )}
+
+        {view === "chat" && (
+          <div className="rounded-feature border-2 border-black bg-white p-6">
+            Chat coming in Task 21.
           </div>
-        ) : showAll ? (
-          BUCKET_CONFIG.map(({ key, label, accent }) => (
-            <BucketRow
-              key={key}
-              label={label}
-              accent={accent}
-              items={allBuckets[key]}
-              getCourseCode={(d) => courseByDeadline.get(d.id)?.code ?? null}
-            />
-          ))
-        ) : (
-          BUCKET_CONFIG.map(({ key, label, accent }) => (
-            <BucketRow
-              key={key}
-              label={label}
-              accent={accent}
-              items={activeCourse!.buckets[key]}
-            />
-          ))
+        )}
+
+        {view === "materials" && (
+          <div className="rounded-feature border-2 border-black bg-white p-6">
+            Materials coming in Task 22.
+          </div>
         )}
       </main>
     </div>
