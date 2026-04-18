@@ -1,11 +1,21 @@
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from hashlib import sha256
+from uuid import UUID
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from studybuddy.canvas.classify import classify_deadline
 from studybuddy.canvas.client import CanvasClient, CanvasUnauthorized
 from studybuddy.db.models import Course, Deadline, File as FileModel, User
+from studybuddy.rag import INDEX_VERSION
 from studybuddy.security.crypto import decrypt_pat
+
+
+@dataclass
+class SyncResult:
+    pending_file_ids: list[UUID] = field(default_factory=list)
+    pending_deadline_ids: list[UUID] = field(default_factory=list)
 
 
 async def _safe_get(client: CanvasClient, path: str, params: dict | None = None) -> list[dict]:
@@ -19,7 +29,7 @@ async def _safe_get(client: CanvasClient, path: str, params: dict | None = None)
         raise
 
 
-async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> None:
+async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResult:
     if user.pat_encrypted is None or user.pat_nonce is None:
         raise ValueError("user has no PAT configured")
 
@@ -72,6 +82,50 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> None:
 
     user.last_synced_at = datetime.now(timezone.utc)
     await db.flush()
+
+    return await _pending_indexing(db, user)
+
+
+async def _pending_indexing(db: AsyncSession, user: User) -> SyncResult:
+    """Collect files/deadlines that need indexing after this sync.
+
+    Files: indexed_at is NULL OR index_version < INDEX_VERSION OR
+           updated_at > indexed_at.
+    Deadlines: description is non-empty AND
+               (description_hash is NULL OR hash(description) != description_hash).
+    """
+    pending_files = (await db.execute(
+        select(FileModel.id).where(
+            FileModel.user_id == user.id,
+            FileModel.deleted_at.is_(None),
+            (
+                FileModel.indexed_at.is_(None)
+                | (FileModel.index_version.is_(None))
+                | (FileModel.index_version < INDEX_VERSION)
+                | (
+                    FileModel.updated_at.is_not(None)
+                    & (FileModel.updated_at > FileModel.indexed_at)
+                )
+            ),
+        )
+    )).scalars().all()
+
+    deadline_rows = (await db.execute(
+        select(Deadline).where(Deadline.user_id == user.id)
+    )).scalars().all()
+    pending_deadlines: list = []
+    for d in deadline_rows:
+        desc = (d.description or "").strip()
+        if not desc:
+            continue
+        h = sha256((d.description or "").encode("utf-8")).hexdigest()
+        if d.description_hash != h:
+            pending_deadlines.append(d.id)
+
+    return SyncResult(
+        pending_file_ids=list(pending_files),
+        pending_deadline_ids=pending_deadlines,
+    )
 
 
 def _course_dates(payload: dict):
