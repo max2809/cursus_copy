@@ -7,6 +7,7 @@ import { CourseSubTabs, type SubTabKey } from "../components/CourseSubTabs";
 import Logo from "../components/Logo";
 import { ApiError } from "../api/client";
 import { isChatFeatureEnabled } from "../lib/featureFlags";
+import { ChatTab } from "../components/chat/ChatTab";
 import type { BucketKey, CourseDeadlines, Deadline, DeadlineCourse } from "../api/types";
 
 function lastSynced(iso: string | null): string {
@@ -185,10 +186,11 @@ export default function Dashboard() {
           )
         )}
 
-        {view === "chat" && (
-          <div className="rounded-feature border-2 border-black bg-white p-6">
-            Chat coming in Task 21.
-          </div>
+        {view === "chat" && activeCourse && (
+          <ChatTab
+            canvasCourseId={activeCourse.course.canvas_course_id}
+            courseName={activeCourse.course.name}
+          />
         )}
 
         {view === "materials" && (

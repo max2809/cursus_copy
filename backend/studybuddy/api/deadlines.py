@@ -94,7 +94,12 @@ async def get_deadlines(
         cid = str(course.id)
         if cid not in by_course:
             by_course[cid] = {
-                "course": {"id": cid, "name": course.name, "code": course.code},
+                "course": {
+                    "id": cid,
+                    "canvas_course_id": course.canvas_course_id,
+                    "name": course.name,
+                    "code": course.code,
+                },
                 "buckets": _empty_buckets(),
                 "earliest_due": None,  # for sorting; stripped before responding
                 "pending_count": 0,

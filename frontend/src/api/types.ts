@@ -2,6 +2,7 @@ export type DeadlineType = "assignment" | "quiz" | "exam" | "event" | "other";
 
 export interface DeadlineCourse {
   id: string;
+  canvas_course_id: number;
   name: string;
   code: string | null;
 }
