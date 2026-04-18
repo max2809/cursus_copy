@@ -11,7 +11,7 @@ small datasets so the cost is negligible.
 from __future__ import annotations
 import math
 from typing import Protocol
-from sqlalchemy import select, text
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from studybuddy.db.models import Chunk
@@ -45,15 +45,20 @@ async def _recall(db: AsyncSession, *, user_id, course_id,
                   query_embedding: list[float], limit: int) -> list[Chunk]:
     dialect = db.bind.dialect.name if db.bind else "sqlite"
     if dialect == "postgresql":
-        # pgvector: <=> is cosine distance. Use bind param via text() with cast.
+        # pgvector: <=> is cosine distance. Typed bindparam makes
+        # pgvector.sqlalchemy.Vector's bind_processor emit the '[1.0,2.0,...]'
+        # text form that pgvector expects — asyncpg would otherwise send a
+        # Python list as a Postgres float8[] which the vector type rejects.
+        from pgvector.sqlalchemy import Vector
         stmt = text(
-            """
-            SELECT id FROM chunks
-            WHERE user_id = :u AND course_id = :c
-            ORDER BY embedding <=> (:q)::vector
-            LIMIT :n
-            """
-        ).bindparams(u=user_id, c=course_id, q=query_embedding, n=limit)
+            "SELECT id FROM chunks "
+            "WHERE user_id = :u AND course_id = :c "
+            "ORDER BY embedding <=> :q "
+            "LIMIT :n"
+        ).bindparams(
+            bindparam("q", value=query_embedding, type_=Vector(len(query_embedding))),
+            u=user_id, c=course_id, n=limit,
+        )
         rows = (await db.execute(stmt)).all()
         ids = [r[0] for r in rows]
         if not ids:
