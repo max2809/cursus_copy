@@ -42,13 +42,22 @@ async def db(test_engine):
 
 
 @pytest_asyncio.fixture
-async def client(db):
+async def client(db, test_engine, monkeypatch):
     from studybuddy.db.base import get_db
+    from studybuddy.db import base as db_base
 
     app = create_app()
 
     async def override_get_db():
         yield db
+
+    # Point AsyncSessionLocal at the test engine so background tasks that open
+    # their own session (e.g. materials indexer wrappers) hit the in-memory DB.
+    test_sessionmaker = async_sessionmaker(test_engine, expire_on_commit=False)
+    monkeypatch.setattr(db_base, "AsyncSessionLocal", test_sessionmaker)
+    # Also patch references that were imported at module load time.
+    from studybuddy.api import materials as materials_mod
+    monkeypatch.setattr(materials_mod, "AsyncSessionLocal", test_sessionmaker)
 
     app.dependency_overrides[get_db] = override_get_db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from studybuddy.auth.deps import current_user
 from studybuddy.chat.deps import get_embedder, resolve_course
 from studybuddy.config import get_settings
-from studybuddy.db.base import get_db
+from studybuddy.db.base import AsyncSessionLocal, get_db
 from studybuddy.db.models import Chunk, File as FileModel, User
 from studybuddy.rag.indexer import index_file, index_upload_bytes
 from studybuddy.security.crypto import decrypt_pat
@@ -115,16 +115,13 @@ async def upload_material(
     await db.commit()
     await db.refresh(row)
 
-    embedder = get_embedder()
     background.add_task(
-        index_upload_bytes,
-        db,
-        user=user,
+        _index_upload_in_background,
+        user_id=user.id,
         file_id=row.id,
         raw=raw,
         content_type=content_type,
         filename=row.filename,
-        voyage_embedder=embedder,
         chunk_tokens=settings.rag_chunk_tokens,
         chunk_overlap=settings.rag_chunk_overlap,
     )
@@ -159,13 +156,10 @@ async def add_url_material(
     await db.commit()
     await db.refresh(row)
 
-    embedder = get_embedder()
     background.add_task(
-        index_file,
-        db,
-        user=user,
+        _index_file_in_background,
+        user_id=user.id,
         file_id=row.id,
-        voyage_embedder=embedder,
         pat=None,
         canvas_base_url=user.canvas_base_url,
         max_bytes=settings.rag_max_upload_mb * 1024 * 1024,
@@ -215,14 +209,11 @@ async def refresh_materials(
     await db.commit()
 
     pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
-    embedder = get_embedder()
     for fid in result.pending_file_ids:
         background.add_task(
-            index_file,
-            db,
-            user=user,
+            _index_file_in_background,
+            user_id=user.id,
             file_id=fid,
-            voyage_embedder=embedder,
             pat=pat,
             canvas_base_url=user.canvas_base_url,
             max_bytes=settings.rag_max_upload_mb * 1024 * 1024,
@@ -230,6 +221,68 @@ async def refresh_materials(
             chunk_overlap=settings.rag_chunk_overlap,
         )
     return await list_materials(canvas_course_id=canvas_course_id, user=user, db=db)
+
+
+async def _index_upload_in_background(
+    *,
+    user_id,
+    file_id,
+    raw: bytes,
+    content_type: str,
+    filename: str,
+    chunk_tokens: int,
+    chunk_overlap: int,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        user = (await db.execute(select(User).where(User.id == user_id))).scalar_one()
+        embedder = get_embedder()
+        try:
+            await index_upload_bytes(
+                db,
+                user=user,
+                file_id=file_id,
+                raw=raw,
+                content_type=content_type,
+                filename=filename,
+                voyage_embedder=embedder,
+                chunk_tokens=chunk_tokens,
+                chunk_overlap=chunk_overlap,
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+
+
+async def _index_file_in_background(
+    *,
+    user_id,
+    file_id,
+    pat: str | None,
+    canvas_base_url: str,
+    max_bytes: int,
+    chunk_tokens: int,
+    chunk_overlap: int,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        user = (await db.execute(select(User).where(User.id == user_id))).scalar_one()
+        embedder = get_embedder()
+        try:
+            await index_file(
+                db,
+                user=user,
+                file_id=file_id,
+                voyage_embedder=embedder,
+                pat=pat,
+                canvas_base_url=canvas_base_url,
+                max_bytes=max_bytes,
+                chunk_tokens=chunk_tokens,
+                chunk_overlap=chunk_overlap,
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
 
 
 def _to_response(r: FileModel) -> MaterialResponse:
