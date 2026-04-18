@@ -8,6 +8,7 @@ import Logo from "../components/Logo";
 import { ApiError } from "../api/client";
 import { isChatFeatureEnabled } from "../lib/featureFlags";
 import { ChatTab } from "../components/chat/ChatTab";
+import { MaterialsTab } from "../components/materials/MaterialsTab";
 import type { BucketKey, CourseDeadlines, Deadline, DeadlineCourse } from "../api/types";
 
 function lastSynced(iso: string | null): string {
@@ -193,10 +194,11 @@ export default function Dashboard() {
           />
         )}
 
-        {view === "materials" && (
-          <div className="rounded-feature border-2 border-black bg-white p-6">
-            Materials coming in Task 22.
-          </div>
+        {view === "materials" && activeCourse && (
+          <MaterialsTab
+            canvasCourseId={activeCourse.course.canvas_course_id}
+            courseName={activeCourse.course.name}
+          />
         )}
       </main>
     </div>
