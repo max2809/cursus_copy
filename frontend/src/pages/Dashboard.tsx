@@ -6,7 +6,6 @@ import CourseTabs from "../components/CourseTabs";
 import { CourseSubTabs, type SubTabKey } from "../components/CourseSubTabs";
 import Logo from "../components/Logo";
 import { ApiError } from "../api/client";
-import { isChatFeatureEnabled } from "../lib/featureFlags";
 import { ChatTab } from "../components/chat/ChatTab";
 import { MaterialsTab } from "../components/materials/MaterialsTab";
 import type { BucketKey, CourseDeadlines, Deadline, DeadlineCourse } from "../api/types";
@@ -32,7 +31,6 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeCourseId = searchParams.get("course");
-  const chatEnabled = isChatFeatureEnabled();
   const view: SubTabKey = (searchParams.get("view") as SubTabKey) || "deadlines";
   const { data, isLoading, error, refetch } = useDeadlines();
   const sync = useSync();
@@ -151,8 +149,8 @@ export default function Dashboard() {
           onChange={onTabChange}
         />
 
-        {activeCourseId && chatEnabled && (
-          <CourseSubTabs active={view} onChange={setView} chatEnabled={chatEnabled} />
+        {activeCourseId && (
+          <CourseSubTabs active={view} onChange={setView} />
         )}
 
         {view === "deadlines" && (

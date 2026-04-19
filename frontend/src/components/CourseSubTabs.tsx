@@ -3,20 +3,18 @@ export type SubTabKey = "deadlines" | "chat" | "materials";
 interface Props {
   active: SubTabKey;
   onChange: (next: SubTabKey) => void;
-  chatEnabled: boolean;
 }
 
-export function CourseSubTabs({ active, onChange, chatEnabled }: Props) {
-  const tabs: { key: SubTabKey; label: string }[] = [
-    { key: "deadlines", label: "Deadlines" },
-  ];
-  if (chatEnabled) {
-    tabs.push({ key: "chat", label: "Chat" });
-    tabs.push({ key: "materials", label: "Materials" });
-  }
+const TABS: { key: SubTabKey; label: string }[] = [
+  { key: "deadlines", label: "Deadlines" },
+  { key: "chat", label: "Chat" },
+  { key: "materials", label: "Materials" },
+];
+
+export function CourseSubTabs({ active, onChange }: Props) {
   return (
     <div className="flex gap-2 flex-wrap mb-4">
-      {tabs.map((t) => {
+      {TABS.map((t) => {
         const isActive = t.key === active;
         return (
           <button
