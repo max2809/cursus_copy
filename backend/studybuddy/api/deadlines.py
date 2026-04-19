@@ -1,14 +1,16 @@
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from studybuddy.api.materials import enqueue_pending_indexing
 from studybuddy.auth.deps import current_user
 from studybuddy.canvas.client import CanvasUnauthorized
 from studybuddy.config import get_settings
 from studybuddy.db.base import get_db
 from studybuddy.db.models import Course, Deadline, User
-from studybuddy.sync.orchestrator import sync_user
+from studybuddy.security.crypto import decrypt_pat
+from studybuddy.sync.orchestrator import SyncResult, sync_user
 
 
 router = APIRouter(prefix="/api", tags=["deadlines"])
@@ -34,6 +36,7 @@ def _empty_buckets() -> dict[str, list]:
 
 @router.get("/deadlines")
 async def get_deadlines(
+    background: BackgroundTasks,
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -44,8 +47,10 @@ async def get_deadlines(
     )
     if stale and user.pat_encrypted is not None:
         try:
-            await sync_user(db, user, master_key=settings.master_key_bytes())
+            result = await sync_user(db, user, master_key=settings.master_key_bytes())
             await db.commit()
+            pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
+            enqueue_pending_indexing(background, user=user, pat=pat, result=result)
         except CanvasUnauthorized:
             await db.commit()
         except Exception:

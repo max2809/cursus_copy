@@ -16,17 +16,18 @@ export async function apiFetch<T>(
   opts?: ApiFetchOptions,
 ): Promise<T> {
   const { parseJson = true, headers, body, ...init } = opts ?? {};
-  // Only default to JSON content-type when the body is a string (not FormData, etc.).
-  const defaultHeaders: Record<string, string> = {};
-  if (typeof body === "string") {
-    defaultHeaders["Content-Type"] = "application/json";
+  // Only default to JSON content-type when body is a string AND the caller hasn't
+  // already set it (case-insensitive check — duplicating this header breaks FastAPI).
+  const callerHeaders = headers ?? {};
+  const hasContentType = Object.keys(callerHeaders as Record<string, string>)
+    .some((k) => k.toLowerCase() === "content-type");
+  const mergedHeaders: Record<string, string> = { ...callerHeaders as Record<string, string> };
+  if (typeof body === "string" && !hasContentType) {
+    mergedHeaders["Content-Type"] = "application/json";
   }
   const resp = await fetch(`${BASE}${path}`, {
     credentials: "include",
-    headers: {
-      ...defaultHeaders,
-      ...(headers ?? {}),
-    },
+    headers: mergedHeaders,
     body,
     ...init,
   });

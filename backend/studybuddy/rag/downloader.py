@@ -51,6 +51,32 @@ async def download_canvas_file(
         return body, content_type, filename
 
 
+async def download_canvas_page(
+    *,
+    canvas_base_url: str,
+    pat: str,
+    canvas_course_id: int,
+    page_slug: str,
+    max_bytes: int,
+) -> tuple[bytes, str, str]:
+    """Fetch a Canvas Page's body HTML. Returns (bytes, content_type, filename).
+
+    Canvas Pages API: GET /api/v1/courses/{course_id}/pages/{page_url} returns
+    {title, body, ...} where body is the rendered HTML.
+    """
+    headers = {"Authorization": f"Bearer {pat}"}
+    url = f"https://{canvas_base_url}/api/v1/courses/{canvas_course_id}/pages/{page_slug}"
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
+        r = await c.get(url, headers=headers)
+        r.raise_for_status()
+        payload = r.json()
+        body_html = (payload.get("body") or "").encode("utf-8")
+        if len(body_html) > max_bytes:
+            raise DownloadTooLarge(f"canvas page {page_slug} is {len(body_html)} bytes (>{max_bytes})")
+        title = payload.get("title") or page_slug
+        return body_html, "text/html", title
+
+
 async def fetch_url(url: str, *, max_bytes: int) -> tuple[bytes, str, str]:
     """Returns (bytes, content_type, filename) for a public URL."""
     parsed = urlparse(url)

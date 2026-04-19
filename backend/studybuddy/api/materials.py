@@ -17,9 +17,9 @@ from studybuddy.chat.deps import get_embedder, resolve_course
 from studybuddy.config import get_settings
 from studybuddy.db.base import AsyncSessionLocal, get_db
 from studybuddy.db.models import Chunk, File as FileModel, User
-from studybuddy.rag.indexer import index_file, index_upload_bytes
+from studybuddy.rag.indexer import index_assignment_description, index_file, index_upload_bytes
 from studybuddy.security.crypto import decrypt_pat
-from studybuddy.sync.orchestrator import sync_user
+from studybuddy.sync.orchestrator import SyncResult, sync_user
 
 
 router = APIRouter(prefix="/api/courses/{canvas_course_id}/materials", tags=["materials"])
@@ -38,7 +38,7 @@ _UPLOAD_MIME_ALLOW = {
 class MaterialResponse(BaseModel):
     id: UUID
     filename: str
-    source: Literal["canvas", "upload", "url"]
+    source: Literal["canvas", "canvas_page", "upload", "url"]
     source_url: str | None = None
     size_bytes: int | None = None
     content_type: str | None = None
@@ -209,17 +209,7 @@ async def refresh_materials(
     await db.commit()
 
     pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
-    for fid in result.pending_file_ids:
-        background.add_task(
-            _index_file_in_background,
-            user_id=user.id,
-            file_id=fid,
-            pat=pat,
-            canvas_base_url=user.canvas_base_url,
-            max_bytes=settings.rag_max_upload_mb * 1024 * 1024,
-            chunk_tokens=settings.rag_chunk_tokens,
-            chunk_overlap=settings.rag_chunk_overlap,
-        )
+    enqueue_pending_indexing(background, user=user, pat=pat, result=result)
     return await list_materials(canvas_course_id=canvas_course_id, user=user, db=db)
 
 
@@ -283,6 +273,66 @@ async def _index_file_in_background(
         except Exception:
             await db.rollback()
             raise
+
+
+async def _index_assignment_description_in_background(
+    *,
+    user_id,
+    deadline_id,
+    chunk_tokens: int,
+    chunk_overlap: int,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        user = (await db.execute(select(User).where(User.id == user_id))).scalar_one()
+        embedder = get_embedder()
+        try:
+            await index_assignment_description(
+                db,
+                user=user,
+                deadline_id=deadline_id,
+                voyage_embedder=embedder,
+                chunk_tokens=chunk_tokens,
+                chunk_overlap=chunk_overlap,
+            )
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
+
+
+def enqueue_pending_indexing(
+    background: BackgroundTasks,
+    *,
+    user: User,
+    pat: str | None,
+    result: SyncResult,
+) -> None:
+    """Schedule background indexing for every (file + deadline) that sync flagged pending.
+
+    pat may be None for url-sourced files. Canvas-sourced files and canvas_page
+    files both need the PAT — skip them silently when pat is None.
+    """
+    settings = get_settings()
+    max_bytes = settings.rag_max_upload_mb * 1024 * 1024
+    for file_id in result.pending_file_ids:
+        background.add_task(
+            _index_file_in_background,
+            user_id=user.id,
+            file_id=file_id,
+            pat=pat,
+            canvas_base_url=user.canvas_base_url,
+            max_bytes=max_bytes,
+            chunk_tokens=settings.rag_chunk_tokens,
+            chunk_overlap=settings.rag_chunk_overlap,
+        )
+    for deadline_id in result.pending_deadline_ids:
+        background.add_task(
+            _index_assignment_description_in_background,
+            user_id=user.id,
+            deadline_id=deadline_id,
+            chunk_tokens=settings.rag_chunk_tokens,
+            chunk_overlap=settings.rag_chunk_overlap,
+        )
 
 
 def _to_response(r: FileModel) -> MaterialResponse:

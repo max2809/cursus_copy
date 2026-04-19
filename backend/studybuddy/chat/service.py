@@ -56,6 +56,8 @@ async def answer_and_stream(
     top_k_rerank: int,
     claude_model: str,
     max_output_tokens: int = 2048,
+    today=None,  # datetime.date — injected so Claude can resolve "last lecture" etc.
+    course_start_date=None,  # datetime.date — optional; enables "we're in week N"
 ) -> AsyncIterator[StreamEvent]:
     session = (await db.execute(
         select(ChatSession).where(
@@ -87,20 +89,36 @@ async def answer_and_stream(
         user_query=user_text,
         context_block=context_block,
     )
-    system_prompt = build_system_prompt(course_name=course_name, canvas_base_url=canvas_base_url)
+    system_prompt = build_system_prompt(
+        course_name=course_name,
+        canvas_base_url=canvas_base_url,
+        today=today,
+        course_start_date=course_start_date,
+    )
 
     full_text = ""
     had_error = False
     error_msg = ""
 
+    # Anthropic SDK uses client.messages.stream(...) with a text_stream attr
+    # (async iterable). Tests inject a fake that exposes messages_stream instead,
+    # so we accept either shape.
+    stream_fn = getattr(claude_client, "messages_stream", None)
+    if stream_fn is None:
+        stream_fn = claude_client.messages.stream
     try:
-        async with claude_client.messages_stream(
+        async with stream_fn(
             model=claude_model,
             max_tokens=max_output_tokens,
             system=system_prompt,
             messages=messages,
         ) as stream:
-            async for delta in stream.text_stream():
+            text_iter = stream.text_stream
+            # Real SDK: text_stream is an async iterator (property).
+            # Fake: text_stream is a method returning an async generator.
+            if callable(text_iter):
+                text_iter = text_iter()
+            async for delta in text_iter:
                 full_text += delta
                 yield StreamEvent(kind="token", text=delta)
     except Exception as e:  # noqa: BLE001 — we persist the partial and let upstream decide

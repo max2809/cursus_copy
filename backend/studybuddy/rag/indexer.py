@@ -15,10 +15,10 @@ from typing import Awaitable, Callable, Protocol
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from studybuddy.db.models import Chunk, Deadline, File as FileModel, User
+from studybuddy.db.models import Chunk, Course, Deadline, File as FileModel, User
 from studybuddy.rag import INDEX_VERSION
 from studybuddy.rag.chunker import chunk_markdown
-from studybuddy.rag.downloader import download_canvas_file, fetch_url
+from studybuddy.rag.downloader import download_canvas_file, download_canvas_page, fetch_url
 from studybuddy.rag.parser import ParsedDoc, parse_to_markdown
 
 
@@ -45,7 +45,7 @@ async def index_file(
     f = (await db.execute(select(FileModel).where(FileModel.id == file_id))).scalar_one()
     try:
         raw, content_type, filename = await _download_for_file(
-            f, pat=pat, canvas_base_url=canvas_base_url,
+            db, f, pat=pat, canvas_base_url=canvas_base_url,
             max_bytes=max_bytes, downloader_fn=downloader_fn,
         )
         doc = parse_to_markdown(raw, content_type=content_type, filename=filename or f.filename)
@@ -79,6 +79,7 @@ async def index_file(
 
 
 async def _download_for_file(
+    db: AsyncSession,
     f: FileModel,
     *,
     pat: str | None,
@@ -95,6 +96,19 @@ async def _download_for_file(
             canvas_base_url=canvas_base_url,
             pat=pat,
             canvas_file_id=f.canvas_file_id,
+            max_bytes=max_bytes,
+        )
+    if f.source == "canvas_page":
+        if not pat:
+            raise RuntimeError("canvas page download requires pat")
+        if not f.source_url:
+            raise RuntimeError("canvas_page row missing source_url (page slug)")
+        course = (await db.execute(select(Course).where(Course.id == f.course_id))).scalar_one()
+        return await download_canvas_page(
+            canvas_base_url=canvas_base_url,
+            pat=pat,
+            canvas_course_id=course.canvas_course_id,
+            page_slug=f.source_url,
             max_bytes=max_bytes,
         )
     if f.source == "url":

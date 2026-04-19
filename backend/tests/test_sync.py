@@ -48,6 +48,11 @@ async def test_sync_inserts_courses_deadlines_files(db, httpx_mock):
         json=[{"id": 500, "display_name": "slides.pdf", "url": "https://canvas.eur.nl/files/500",
                "size": 10240, "content-type": "application/pdf"}],
     )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/modules?include%5B%5D=items",
+        json=[],
+    )
 
     await sync_user(db, user, master_key=MASTER_KEY)
 
@@ -85,6 +90,11 @@ async def test_sync_is_idempotent(db, httpx_mock):
             json=[],
         )
         httpx_mock.add_response(method="GET", url="https://canvas.eur.nl/api/v1/courses/10/files", json=[])
+        httpx_mock.add_response(
+            method="GET",
+            url="https://canvas.eur.nl/api/v1/courses/10/modules?include%5B%5D=items",
+            json=[],
+        )
 
     await sync_user(db, user, master_key=MASTER_KEY)
     await sync_user(db, user, master_key=MASTER_KEY)

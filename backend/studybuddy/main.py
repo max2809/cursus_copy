@@ -1,7 +1,12 @@
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from studybuddy.config import get_settings
+
+logger = logging.getLogger("studybuddy.debug")
 
 
 @asynccontextmanager
@@ -38,6 +43,16 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health():
         return {"ok": True}
+
+    @app.exception_handler(RequestValidationError)
+    async def log_422(request: Request, exc: RequestValidationError):
+        logger.error("422 on %s %s | ct=%s | errors=%s",
+                     request.method, request.url.path,
+                     request.headers.get("content-type"), exc.errors())
+        # Use FastAPI's jsonable_encoder so bytes values in the error payload
+        # don't blow up json.dumps.
+        from fastapi.encoders import jsonable_encoder
+        return JSONResponse({"detail": jsonable_encoder(exc.errors())}, status_code=422)
 
     return app
 

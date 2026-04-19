@@ -45,6 +45,11 @@ async def test_sync_returns_pending_indexing_for_new_files(db, httpx_mock):
                "url": "https://x", "content-type": "application/pdf",
                "size": 1024, "updated_at": "2026-04-16T12:00:00Z"}],
     )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/modules?include%5B%5D=items",
+        json=[],
+    )
     result = await sync_user(db, user, master_key=MASTER_KEY)
     # Every file fresh from Canvas is "pending".
     file_ids = [f.id for f in (await db.execute(select(FileModel))).scalars().all()]
@@ -78,6 +83,11 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
                "content-type": "application/pdf", "size": 1024,
                "updated_at": "2026-04-16T12:00:00Z"}],
     )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/modules?include%5B%5D=items",
+        json=[],
+    )
     # First sync inserts the file.
     await sync_user(db, user, master_key=MASTER_KEY)
     # Mark it fully indexed.
@@ -110,6 +120,11 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
                "content-type": "application/pdf", "size": 1024,
                "updated_at": "2026-04-16T12:00:00Z"}],
     )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/modules?include%5B%5D=items",
+        json=[],
+    )
     result2 = await sync_user(db, user, master_key=MASTER_KEY)
     assert result2.pending_file_ids == []
 
@@ -138,6 +153,11 @@ async def test_sync_reindexes_on_description_hash_drift(db, httpx_mock):
         httpx_mock.add_response(
             method="GET",
             url="https://canvas.eur.nl/api/v1/courses/10/files",
+            json=[],
+        )
+        httpx_mock.add_response(
+            method="GET",
+            url="https://canvas.eur.nl/api/v1/courses/10/modules?include%5B%5D=items",
             json=[],
         )
     r1 = await sync_user(db, user, master_key=MASTER_KEY)

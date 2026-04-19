@@ -5,6 +5,7 @@ The assistant is instructed to emit citations in the same [N] form, and
 we parse them post-hoc into structured citation rows.
 """
 from __future__ import annotations
+from datetime import date
 from typing import Iterable
 from studybuddy.db.models import Chunk
 
@@ -13,6 +14,7 @@ _SYSTEM_TEMPLATE = (
     "You are a study assistant for {course_name} at {canvas_base_url}.\n"
     "You have access to course materials (lecture slides, readings, assignment "
     "briefs, and anything the user has uploaded).\n\n"
+    "{temporal_context}"
     "Rules:\n"
     "- Answer using ONLY the provided context blocks below. If the context "
     "does not contain the answer, say so plainly — do not invent facts or draw "
@@ -22,14 +24,32 @@ _SYSTEM_TEMPLATE = (
     "- Keep answers concise and structured (short paragraphs, bullet lists "
     "when useful).\n"
     "- Respond in the same language as the user's question when possible; "
-    "course materials may be in English or Dutch."
+    "course materials may be in English or Dutch.\n"
+    "- When the user says \"last lecture\", \"this week\", \"yesterday\" etc., "
+    "interpret them relative to today's date given above — pick the most recently "
+    "scheduled lecture that's already passed."
 )
 
 
-def build_system_prompt(*, course_name: str, canvas_base_url: str) -> str:
+def build_system_prompt(
+    *,
+    course_name: str,
+    canvas_base_url: str,
+    today: date | None = None,
+    course_start_date: date | None = None,
+) -> str:
+    lines: list[str] = []
+    if today is not None:
+        lines.append(f"Today's date: {today.isoformat()} ({today.strftime('%A')}).")
+        # We intentionally don't compute a "week number" from course_start_date —
+        # Canvas returns the academic-year/term start, not the specific block's
+        # start, so any week count is misleading. Claude should infer the current
+        # week from dates in the indexed syllabus/module content instead.
+    temporal = ("\n".join(lines) + "\n\n") if lines else ""
     return _SYSTEM_TEMPLATE.format(
         course_name=course_name,
         canvas_base_url=canvas_base_url,
+        temporal_context=temporal,
     )
 
 

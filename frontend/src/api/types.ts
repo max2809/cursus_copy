@@ -36,7 +36,7 @@ export interface DeadlinesResponse {
   last_synced_at: string | null;
 }
 
-export type MaterialSource = "canvas" | "upload" | "url";
+export type MaterialSource = "canvas" | "canvas_page" | "upload" | "url";
 
 export interface MaterialItem {
   id: string;

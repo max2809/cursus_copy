@@ -7,8 +7,8 @@ interface Props {
 }
 
 export function MaterialsList({ items, onDelete }: Props) {
-  const canvas = items.filter((m) => m.source === "canvas");
-  const user = items.filter((m) => m.source !== "canvas");
+  const canvas = items.filter((m) => m.source === "canvas" || m.source === "canvas_page");
+  const user = items.filter((m) => m.source === "upload" || m.source === "url");
   return (
     <div className="space-y-6">
       <section>

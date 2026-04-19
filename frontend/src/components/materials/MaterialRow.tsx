@@ -19,7 +19,7 @@ function fmtSize(bytes: number | null): string {
 }
 
 export function MaterialRow({ item, onDelete }: Props) {
-  const isCanvas = item.source === "canvas";
+  const isCanvas = item.source === "canvas" || item.source === "canvas_page";
   return (
     <div className="flex items-center gap-3 border-b border-oat/30 py-2 text-sm">
       <span

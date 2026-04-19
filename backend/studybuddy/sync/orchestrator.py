@@ -80,6 +80,42 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
         for f in files:
             await _upsert_file(db, user.id, course.id, f)
 
+        # Module walker — picks up files and pages embedded in modules even
+        # when the Files tab is restricted to students (403 on /files).
+        modules = await _safe_get(
+            client,
+            f"/api/v1/courses/{course.canvas_course_id}/modules",
+            params={"include[]": "items"},
+        )
+        for m in modules:
+            for item in m.get("items") or []:
+                itype = item.get("type")
+                if itype == "File":
+                    file_id = item.get("content_id")
+                    if file_id is None:
+                        continue
+                    # Fetch this file's metadata directly. The per-file endpoint
+                    # often works even when listing /files is 403.
+                    try:
+                        one = await client.get_paginated(f"/api/v1/files/{file_id}")
+                        payload = one[0] if one else None
+                    except httpx.HTTPStatusError:
+                        payload = None
+                    if payload:
+                        await _upsert_file(db, user.id, course.id, payload)
+                elif itype == "Page":
+                    page_url = item.get("page_url")
+                    if not page_url:
+                        continue
+                    await _upsert_page(
+                        db,
+                        user.id,
+                        course.id,
+                        page_slug=page_url,
+                        title=item.get("title") or page_url,
+                        html_url=item.get("html_url") or "",
+                    )
+
     user.last_synced_at = datetime.now(timezone.utc)
     await db.flush()
 
@@ -254,3 +290,48 @@ async def _upsert_file(db: AsyncSession, user_id, course_id, payload: dict) -> N
         existing.folder_path = payload.get("folder_path")
         existing.updated_at = updated_at
         existing.synced_at = datetime.now(timezone.utc)
+
+
+async def _upsert_page(
+    db: AsyncSession,
+    user_id,
+    course_id,
+    *,
+    page_slug: str,
+    title: str,
+    html_url: str,
+) -> None:
+    """Upsert a Canvas Page as a FileModel with source='canvas_page'.
+
+    page_slug (the Canvas page URL path) is stored in source_url so the
+    indexer can re-fetch the page body via the Pages API. We keep
+    canvas_file_id NULL to distinguish from actual uploaded files.
+    Identity is (user_id, course_id, source='canvas_page', source_url=slug).
+    """
+    existing = (await db.execute(
+        select(FileModel).where(
+            FileModel.user_id == user_id,
+            FileModel.course_id == course_id,
+            FileModel.source == "canvas_page",
+            FileModel.source_url == page_slug,
+        )
+    )).scalar_one_or_none()
+
+    now = datetime.now(timezone.utc)
+    if existing is None:
+        db.add(FileModel(
+            user_id=user_id,
+            course_id=course_id,
+            canvas_file_id=None,
+            filename=title,
+            content_type="text/html",
+            url=html_url,
+            source="canvas_page",
+            source_url=page_slug,
+            uploaded_at=now,
+            synced_at=now,
+        ))
+    else:
+        existing.filename = title or existing.filename
+        existing.url = html_url or existing.url
+        existing.synced_at = now

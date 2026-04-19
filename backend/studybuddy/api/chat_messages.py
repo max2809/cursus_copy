@@ -1,6 +1,7 @@
 """Streaming chat message endpoint (Server-Sent Events)."""
 from __future__ import annotations
 import json
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -75,6 +76,8 @@ async def post_message(
                 top_k_recall=settings.rag_top_k_recall,
                 top_k_rerank=settings.rag_top_k_rerank,
                 claude_model=settings.rag_claude_model,
+                today=date.today(),
+                course_start_date=course.start_date,
             ):
                 if event.kind == "token":
                     yield {"event": "token", "data": json.dumps({"text": event.text})}
