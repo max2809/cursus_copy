@@ -1,0 +1,130 @@
+/* ---------------------------------------------------------
+   Cursus — design tokens
+   3 themes × 3 accents × 2 densities, all swappable via Tweaks.
+----------------------------------------------------------- */
+
+:root {
+  /* type */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* radii */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* density defaults (comfy) */
+  --pad-1: 8px;
+  --pad-2: 12px;
+  --pad-3: 16px;
+  --pad-4: 24px;
+  --pad-5: 32px;
+  --pad-6: 48px;
+
+  /* motion */
+  --ease: cubic-bezier(.2,.7,.2,1);
+  --fast: 160ms;
+  --mid: 280ms;
+}
+
+[data-density="dense"] {
+  --pad-1: 6px;
+  --pad-2: 10px;
+  --pad-3: 12px;
+  --pad-4: 18px;
+  --pad-5: 24px;
+  --pad-6: 36px;
+}
+
+/* ---------- THEME: Calm (editorial, warm off-white) ---------- */
+[data-theme="calm"] {
+  --bg: oklch(98.4% 0.005 80);
+  --bg-elev: oklch(99.5% 0.003 80);
+  --bg-sunken: oklch(96.5% 0.008 80);
+  --panel: #ffffff;
+  --ink: oklch(22% 0.01 60);
+  --ink-2: oklch(40% 0.01 60);
+  --ink-3: oklch(58% 0.01 60);
+  --ink-4: oklch(72% 0.008 60);
+  --hair: oklch(92% 0.006 60);
+  --hair-2: oklch(88% 0.008 60);
+  --user-bubble: oklch(95% 0.008 60);
+  --ai-bubble: transparent;
+  --code-bg: oklch(96% 0.006 60);
+  --shadow-sm: 0 1px 2px rgba(23, 20, 15, .04), 0 0 0 1px rgba(23, 20, 15, .04);
+  --shadow-md: 0 2px 6px rgba(23, 20, 15, .05), 0 0 0 1px rgba(23, 20, 15, .05);
+  --shadow-lg: 0 12px 40px -12px rgba(23, 20, 15, .12), 0 0 0 1px rgba(23, 20, 15, .05);
+  --glass: rgba(255, 255, 255, .65);
+  --glass-border: rgba(23, 20, 15, .06);
+  --bg-texture: none;
+}
+
+/* ---------- THEME: Glass (AI-forward, subtle gradient) ---------- */
+[data-theme="glass"] {
+  --bg: oklch(97% 0.012 280);
+  --bg-elev: oklch(99% 0.008 280);
+  --bg-sunken: oklch(95% 0.015 280);
+  --panel: rgba(255, 255, 255, .72);
+  --ink: oklch(22% 0.02 270);
+  --ink-2: oklch(40% 0.02 270);
+  --ink-3: oklch(58% 0.02 270);
+  --ink-4: oklch(72% 0.015 270);
+  --hair: oklch(90% 0.015 280);
+  --hair-2: oklch(85% 0.02 280);
+  --user-bubble: oklch(94% 0.02 280);
+  --ai-bubble: transparent;
+  --code-bg: oklch(95% 0.015 280);
+  --shadow-sm: 0 1px 2px rgba(40, 30, 80, .05), 0 0 0 1px rgba(40, 30, 80, .05);
+  --shadow-md: 0 4px 12px rgba(40, 30, 80, .08), 0 0 0 1px rgba(40, 30, 80, .05);
+  --shadow-lg: 0 20px 60px -20px rgba(40, 30, 80, .18), 0 0 0 1px rgba(40, 30, 80, .06);
+  --glass: rgba(255, 255, 255, .55);
+  --glass-border: rgba(80, 60, 140, .1);
+  /* soft aurora gradient behind everything */
+  --bg-texture:
+    radial-gradient(1200px 600px at 85% -10%, oklch(88% 0.08 290 / .55), transparent 60%),
+    radial-gradient(900px 500px at 10% 110%, oklch(90% 0.07 220 / .5), transparent 60%),
+    radial-gradient(700px 500px at 60% 50%, oklch(92% 0.05 180 / .25), transparent 70%);
+}
+
+/* ---------- THEME: Focused dark (late-night study) ---------- */
+[data-theme="dark"] {
+  --bg: oklch(18% 0.012 260);
+  --bg-elev: oklch(22% 0.015 260);
+  --bg-sunken: oklch(14% 0.01 260);
+  --panel: oklch(23% 0.015 260);
+  --ink: oklch(95% 0.01 80);
+  --ink-2: oklch(78% 0.012 60);
+  --ink-3: oklch(62% 0.012 60);
+  --ink-4: oklch(48% 0.012 60);
+  --hair: oklch(30% 0.015 260);
+  --hair-2: oklch(36% 0.02 260);
+  --user-bubble: oklch(27% 0.02 260);
+  --ai-bubble: transparent;
+  --code-bg: oklch(15% 0.012 260);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,.35), 0 0 0 1px rgba(255,255,255,.05);
+  --shadow-lg: 0 24px 60px -16px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.05);
+  --glass: rgba(30, 30, 40, .55);
+  --glass-border: rgba(255, 255, 255, .06);
+  --bg-texture:
+    radial-gradient(900px 500px at 85% -10%, oklch(40% 0.08 280 / .35), transparent 60%),
+    radial-gradient(700px 400px at 5% 105%, oklch(38% 0.07 30 / .25), transparent 60%);
+}
+
+/* ---------- ACCENTS (share chroma+L, vary hue; paired with ink-on-accent) ---------- */
+[data-accent="violet"]   { --accent: oklch(62% 0.17 285);  --accent-2: oklch(72% 0.14 285);  --accent-soft: oklch(94% 0.04 285); --accent-ink: #fff; }
+[data-accent="teal"]     { --accent: oklch(62% 0.13 195);  --accent-2: oklch(72% 0.11 195);  --accent-soft: oklch(94% 0.035 195); --accent-ink: #fff; }
+[data-accent="amber"]    { --accent: oklch(72% 0.16 60);   --accent-2: oklch(80% 0.13 60);   --accent-soft: oklch(95% 0.04 75);  --accent-ink: oklch(20% 0.04 60); }
+[data-accent="sage"]     { --accent: oklch(62% 0.11 150);  --accent-2: oklch(72% 0.09 150);  --accent-soft: oklch(94% 0.03 150); --accent-ink: #fff; }
+/* Erasmus University Rotterdam — Erasmus Green #0c8066 */
+[data-accent="erasmus"]  { --accent: oklch(50% 0.11 168);  --accent-2: oklch(62% 0.10 168);  --accent-soft: oklch(94% 0.03 168); --accent-ink: #fff; }
+
+[data-theme="dark"][data-accent="violet"]  { --accent-soft: oklch(30% 0.07 285); }
+[data-theme="dark"][data-accent="teal"]    { --accent-soft: oklch(30% 0.06 195); }
+[data-theme="dark"][data-accent="amber"]   { --accent-soft: oklch(30% 0.08 60); --accent-ink: oklch(18% 0.03 60); }
+[data-theme="dark"][data-accent="sage"]    { --accent-soft: oklch(30% 0.05 150); }
+[data-theme="dark"][data-accent="erasmus"] { --accent-soft: oklch(28% 0.07 168); --accent: oklch(58% 0.10 168); --accent-2: oklch(68% 0.09 168); }
