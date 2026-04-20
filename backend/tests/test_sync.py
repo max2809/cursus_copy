@@ -23,7 +23,7 @@ async def test_sync_inserts_courses_deadlines_files(db, httpx_mock):
     httpx_mock.add_response(
         method="GET",
         url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
-        json=[{"id": 10, "name": "Algorithms", "course_code": "CS101"}],
+        json=[{"id": 10, "name": "Algorithms", "course_code": "CS101", "enrollments": [{"enrollment_state": "active"}]}],
     )
     httpx_mock.add_response(
         method="GET",
@@ -75,7 +75,7 @@ async def test_sync_is_idempotent(db, httpx_mock):
         httpx_mock.add_response(
             method="GET",
             url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
-            json=[{"id": 10, "name": "Algorithms"}],
+            json=[{"id": 10, "name": "Algorithms", "enrollments": [{"enrollment_state": "active"}]}],
         )
         httpx_mock.add_response(
             method="GET",

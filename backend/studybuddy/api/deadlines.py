@@ -54,7 +54,12 @@ async def get_deadlines(
     # user can chat with it, and archived ("taken") courses remain accessible.
     all_courses_q = (
         select(Course)
-        .where(Course.user_id == user.id, Course.status != "hidden")
+        .where(
+            Course.user_id == user.id,
+            Course.status != "hidden",
+            Course.name != "(unnamed)",
+            Course.name != "",
+        )
     )
     all_courses = (await db.execute(all_courses_q)).scalars().all()
 

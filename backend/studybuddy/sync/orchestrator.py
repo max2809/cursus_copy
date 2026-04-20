@@ -215,21 +215,34 @@ def _course_dates(payload: dict):
 
 
 async def _upsert_course(db: AsyncSession, user_id, payload: dict) -> None:
+    # Canvas occasionally returns placeholder/system rows with no name (sandbox
+    # courses, deleted shells, etc.). They have no deadlines, no files, and just
+    # pollute the sidebar. Skip them entirely — if Canvas later names the course,
+    # it'll come through on the next sync.
+    raw_name = (payload.get("name") or "").strip()
+    if not raw_name or raw_name == "(unnamed)":
+        return
     existing = (await db.execute(
         select(Course).where(Course.user_id == user_id, Course.canvas_course_id == payload["id"])
     )).scalar_one_or_none()
     start_date, end_date = _course_dates(payload)
-    # Canvas workflow_state on a course: "unpublished" | "available" | "completed" | "deleted".
-    # Default new completed/deleted courses to "hidden" so they land in the sidebar's
-    # Hidden section; the user can unhide/promote if they want chat access on old
-    # material. Anything else gets "taking" so the current semester flows through normally.
-    workflow = (payload.get("workflow_state") or "").lower()
-    default_status = "hidden" if workflow in ("completed", "deleted") else "taking"
+    # Default "taking" only if the user has an active enrollment on this course.
+    # Canvas returns an `enrollments` array with per-enrollment state; past
+    # semesters come back as "completed" (or rarely "invited"/"deleted").
+    # Course-level workflow_state isn't a reliable signal — EUR keeps whole
+    # courses "available" for years — so we look at the enrollment instead.
+    enrollments = payload.get("enrollments") or []
+    has_active_enrollment = any(
+        (e.get("enrollment_state") or "").lower() == "active"
+        for e in enrollments
+        if isinstance(e, dict)
+    )
+    default_status = "taking" if has_active_enrollment else "hidden"
     if existing is None:
         db.add(Course(
             user_id=user_id,
             canvas_course_id=payload["id"],
-            name=payload.get("name") or "(unnamed)",
+            name=raw_name,
             code=payload.get("course_code"),
             start_date=start_date,
             end_date=end_date,

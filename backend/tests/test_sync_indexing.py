@@ -24,7 +24,7 @@ async def test_sync_returns_pending_indexing_for_new_files(db, httpx_mock):
     httpx_mock.add_response(
         method="GET",
         url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
-        json=[{"id": 10, "name": "CS", "course_code": "CS101"}],
+        json=[{"id": 10, "name": "CS", "course_code": "CS101", "enrollments": [{"enrollment_state": "active"}]}],
     )
     httpx_mock.add_response(
         method="GET",
@@ -64,7 +64,7 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
     httpx_mock.add_response(
         method="GET",
         url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
-        json=[{"id": 10, "name": "CS"}],
+        json=[{"id": 10, "name": "CS", "enrollments": [{"enrollment_state": "active"}]}],
     )
     httpx_mock.add_response(
         method="GET",
@@ -101,7 +101,7 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
     httpx_mock.add_response(
         method="GET",
         url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
-        json=[{"id": 10, "name": "CS"}],
+        json=[{"id": 10, "name": "CS", "enrollments": [{"enrollment_state": "active"}]}],
     )
     httpx_mock.add_response(
         method="GET",
@@ -136,7 +136,7 @@ async def test_sync_reindexes_on_description_hash_drift(db, httpx_mock):
         httpx_mock.add_response(
             method="GET",
             url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
-            json=[{"id": 10, "name": "CS"}],
+            json=[{"id": 10, "name": "CS", "enrollments": [{"enrollment_state": "active"}]}],
         )
         httpx_mock.add_response(
             method="GET",

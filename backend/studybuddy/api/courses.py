@@ -39,7 +39,11 @@ async def list_courses(
     rows = (
         await db.execute(
             select(Course)
-            .where(Course.user_id == user.id)
+            .where(
+                Course.user_id == user.id,
+                Course.name != "(unnamed)",
+                Course.name != "",
+            )
             .order_by(Course.name.asc())
         )
     ).scalars().all()
