@@ -8,6 +8,7 @@ import {
   IconLibrary,
   IconPlan,
 } from "../../design/icons";
+import { courseColor } from "../../lib/course";
 
 export type NavKey = "home" | "chat" | "plan" | "library" | "courses";
 
@@ -20,19 +21,6 @@ interface Props {
   onCourseSelect: (id: string) => void;
   onCourseStatusChange?: (canvasCourseId: number, status: CourseStatus) => void;
   userEmail?: string;
-}
-
-const COURSE_COLORS = [
-  "oklch(72% 0.14 285)",
-  "oklch(70% 0.14 30)",
-  "oklch(68% 0.13 195)",
-  "oklch(70% 0.12 150)",
-  "oklch(72% 0.13 60)",
-  "oklch(68% 0.13 340)",
-];
-
-function courseColor(_id: string, i: number): string {
-  return COURSE_COLORS[i % COURSE_COLORS.length];
 }
 
 function initialsFrom(email?: string): string {
@@ -145,10 +133,10 @@ export function Sidebar({
           </button>
         </div>
         <div className="courses-list">
-          {takingCourses.map((c, i) => (
+          {takingCourses.map((c) => (
             <CourseChip
               key={c.course.id}
-              color={courseColor(c.course.id, i)}
+              color={courseColor(c.course.id)}
               name={c.course.name}
               code={c.course.code}
               canvasCourseId={c.course.canvas_course_id}
@@ -201,10 +189,10 @@ export function Sidebar({
             </button>
             {showTaken && (
               <div className="courses-list" style={{ marginTop: 2 }}>
-                {takenCourses.map((c, i) => (
+                {takenCourses.map((c) => (
                   <CourseChip
                     key={c.course.id}
-                    color={courseColor(c.course.id, i + takingCourses.length)}
+                    color={courseColor(c.course.id)}
                     name={c.course.name}
                     code={c.course.code}
                     canvasCourseId={c.course.canvas_course_id}
@@ -476,4 +464,3 @@ function MenuItem({
   );
 }
 
-export { courseColor };

@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import type { BucketKey, CourseDeadlines, Deadline, DeadlineCourse } from "../api/types";
 import { useSetDeadlineSubmission } from "../api/queries";
 import { Checkbox } from "../components/home/Checkbox";
-import { courseColor } from "../components/shell/Sidebar";
+import { CourseBadge } from "../components/shared/CourseBadge";
+import { shortCourseCode } from "../lib/course";
 
 interface Props {
   courses: CourseDeadlines[];
@@ -31,35 +32,6 @@ interface Row {
   course: DeadlineCourse;
   courseIndex: number;
   bucket: BucketKey;
-}
-
-function courseBadge(name: string): string {
-  // Three-letter uppercase abbreviation built from the course name so the
-  // coloured square is actually identifiable at a glance. Prefers first
-  // letter of each significant word; falls back to the first three
-  // characters if there aren't enough words.
-  const stop = new Set(["of", "the", "and", "&", "in", "on", "to", "for", "a", "an"]);
-  const words = (name || "")
-    .split(/[\s:\-,\/]+/)
-    .map((w) => w.trim())
-    .filter((w) => w && !stop.has(w.toLowerCase()));
-  if (words.length >= 3) {
-    return words
-      .slice(0, 3)
-      .map((w) => w[0].toUpperCase())
-      .join("");
-  }
-  return (name || "")
-    .replace(/[^A-Za-z]/g, "")
-    .slice(0, 3)
-    .toUpperCase();
-}
-
-function shortCode(code: string | null): string {
-  if (!code) return "";
-  // Drop the common "EUC-" / "EUR-" institutional prefix so the code
-  // itself doesn't wrap onto two lines in the sidebar-date column.
-  return code.replace(/^[A-Z]{2,4}-\s*/, "");
 }
 
 function aggregate(courses: CourseDeadlines[]): Map<BucketKey, Row[]> {
@@ -137,7 +109,6 @@ export function PlanView({ courses }: Props) {
             </div>
             <div className="upcoming">
               {buckets.get(k)!.map((row) => {
-                const color = courseColor(row.course.id, row.courseIndex);
                 const due = formatDue(row.deadline.due_at);
                 const done = !!row.deadline.submitted;
                 return (
@@ -166,24 +137,11 @@ export function PlanView({ courses }: Props) {
                         gap: 4,
                       }}
                     >
-                      <div
-                        style={{
-                          background: color,
-                          color: "var(--accent-ink)",
-                          borderRadius: 8,
-                          width: 40,
-                          height: 36,
-                          display: "grid",
-                          placeItems: "center",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          fontFamily: "var(--font-sans)",
-                          fontStyle: "normal",
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        {courseBadge(row.course.name)}
-                      </div>
+                      <CourseBadge
+                        name={row.course.name}
+                        colorSeed={row.course.id}
+                        size={40}
+                      />
                       <div
                         style={{
                           fontSize: 9.5,
@@ -195,7 +153,7 @@ export function PlanView({ courses }: Props) {
                           marginTop: 0,
                         }}
                       >
-                        {shortCode(row.course.code) || courseBadge(row.course.name)}
+                        {shortCourseCode(row.course.code) || " "}
                       </div>
                     </div>
                     <a

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CourseStatus, CourseSummary } from "../api/types";
 import { useCourses, useUpdateCourseStatus } from "../api/queries";
-import { courseColor } from "../components/shell/Sidebar";
+import { courseColor } from "../lib/course";
 
 const STATUS_LABEL: Record<CourseStatus, string> = {
   taking: "Currently taking",
@@ -221,7 +221,7 @@ export function CoursesView() {
                     <CourseRow
                       key={c.id}
                       course={c}
-                      color={courseColor(c.id, i)}
+                      color={courseColor(c.id)}
                       isLast={i === rows.length - 1}
                       leaving={leaving.has(c.id)}
                       onChange={(next) => requestChange(c, next)}

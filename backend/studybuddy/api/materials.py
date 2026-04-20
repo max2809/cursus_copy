@@ -25,6 +25,7 @@ from studybuddy.chat.deps import get_embedder, resolve_course
 from studybuddy.config import get_settings
 from studybuddy.db.base import AsyncSessionLocal, get_db
 from studybuddy.db.models import Chunk, File as FileModel, User
+from studybuddy.rag.downloader import download_canvas_page, download_canvas_syllabus
 from studybuddy.rag.indexer import index_assignment_description, index_file, index_upload_bytes
 from studybuddy.security.crypto import decrypt_pat
 from studybuddy.sync.orchestrator import SyncResult, sync_user
@@ -302,24 +303,54 @@ async def download_single_material(
     ).scalar_one_or_none()
     if f is None:
         raise HTTPException(status_code=404, detail="file not found")
-    if f.source != "canvas" or not f.url:
-        raise HTTPException(status_code=404, detail="no downloadable body for this material")
 
     pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
+    max_bytes = settings.rag_max_upload_mb * 1024 * 1024
+
+    # Route per source. Canvas files → fetch the signed URL directly.
+    # canvas_page / canvas_syllabus → re-fetch the HTML body via the same
+    # helpers the indexer uses and serve as .html.
     try:
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-            resp = await client.get(
-                f.url, headers={"Authorization": f"Bearer {pat}"}
+        if f.source == "canvas":
+            if not f.url:
+                raise HTTPException(status_code=404, detail="no downloadable body for this material")
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                resp = await client.get(f.url, headers={"Authorization": f"Bearer {pat}"})
+                resp.raise_for_status()
+            content_bytes = resp.content
+            content_type = f.content_type or "application/octet-stream"
+            filename = _safe_filename(f.filename)
+        elif f.source == "canvas_page":
+            if not f.source_url:
+                raise HTTPException(status_code=404, detail="page missing slug")
+            content_bytes, content_type, title = await download_canvas_page(
+                canvas_base_url=user.canvas_base_url,
+                pat=pat,
+                canvas_course_id=course.canvas_course_id,
+                page_slug=f.source_url,
+                max_bytes=max_bytes,
             )
-            resp.raise_for_status()
+            filename = _safe_filename(title or f.filename) + ".html"
+        elif f.source == "canvas_syllabus":
+            content_bytes, content_type, title = await download_canvas_syllabus(
+                canvas_base_url=user.canvas_base_url,
+                pat=pat,
+                canvas_course_id=course.canvas_course_id,
+                max_bytes=max_bytes,
+            )
+            filename = _safe_filename(title or f.filename) + ".html"
+        else:
+            # upload / url: we don't persist the body, so nothing to stream.
+            raise HTTPException(status_code=404, detail="no downloadable body for this material")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning("download_single: fetch failed for %s: %s", f.filename, e)
         raise HTTPException(status_code=502, detail="failed to fetch from Canvas")
 
-    filename = _safe_filename(f.filename)
     return StreamingResponse(
-        iter([resp.content]),
-        media_type=f.content_type or "application/octet-stream",
+        iter([content_bytes]),
+        media_type=content_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

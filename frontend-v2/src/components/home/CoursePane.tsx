@@ -3,14 +3,13 @@ import type { CourseDeadlines, Deadline, MaterialItem } from "../../api/types";
 import { listMaterials, deleteMaterial, refreshMaterials } from "../../api/materials";
 import { useSetDeadlineSubmission } from "../../api/queries";
 import { IconMax, IconRefresh, IconTrash, IconPlus } from "../../design/icons";
-import { courseColor } from "../shell/Sidebar";
+import { CourseBadge } from "../shared/CourseBadge";
 import { AddMaterialModal } from "../materials/AddMaterialModal";
 import { addUrlMaterial, uploadMaterial } from "../../api/materials";
 import { Checkbox } from "./Checkbox";
 
 interface Props {
   course: CourseDeadlines;
-  courseIndex: number;
   onAskInChat?: (prompt: string) => void;
   onMaximize?: () => void;
   maximized?: boolean;
@@ -85,7 +84,6 @@ function relativeDate(iso: string | null): string {
 
 export function CoursePane({
   course,
-  courseIndex,
   onAskInChat,
   onMaximize,
   maximized,
@@ -130,14 +128,15 @@ export function CoursePane({
     return materials.filter((m) => materialKind(m) === filter);
   }, [materials, filter]);
 
-  const color = courseColor(course.course.id, courseIndex);
-
   return (
     <div className="course-pane">
       <div className="course-head">
-        <div className="course-glyph" style={{ background: color }}>
-          {course.course.name.charAt(0)}
-        </div>
+        <CourseBadge
+          name={course.course.name}
+          colorSeed={course.course.id}
+          size={56}
+          radius={12}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="course-title">{course.course.name}</h1>
           <div className="course-meta">
@@ -381,7 +380,7 @@ export function CoursePane({
                   ●
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                {m.source === "canvas" ? (
+                {m.source === "canvas" || m.source === "canvas_page" || m.source === "canvas_syllabus" ? (
                   <button
                     className="iconbtn"
                     title={`Download ${m.filename}`}

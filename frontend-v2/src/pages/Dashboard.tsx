@@ -65,10 +65,6 @@ export default function Dashboard() {
     return courses.find((c) => c.course.id === courseParam) ?? courses[0] ?? null;
   }, [courses, courseParam]);
   const activeCourseId = activeCourse?.course.id ?? null;
-  const activeCourseIndex = useMemo(
-    () => (activeCourse ? courses.findIndex((c) => c.course.id === activeCourse.course.id) : 0),
-    [activeCourse, courses]
-  );
 
   function setNav(n: NavKey) {
     const sp = new URLSearchParams(params);
@@ -208,7 +204,6 @@ export default function Dashboard() {
       <div className="workspace" style={{ gridTemplateColumns: gridCols, position: "relative" }}>
         <CoursePane
           course={activeCourse}
-          courseIndex={activeCourseIndex}
           onMaximize={() => setNav("chat")}
         />
         {!chatHidden && (

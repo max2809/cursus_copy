@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { listMaterials } from "../api/materials";
 import type { CourseDeadlines, MaterialItem } from "../api/types";
-import { courseColor } from "../components/shell/Sidebar";
+import { courseColor } from "../lib/course";
 
 interface Props {
   courses: CourseDeadlines[];
@@ -51,14 +51,14 @@ export function LibraryView({ courses }: Props) {
     let cancelled = false;
     setLoading(true);
     Promise.all(
-      courses.map(async (c, i) => {
+      courses.map(async (c) => {
         try {
           const r = await listMaterials(c.course.canvas_course_id);
           return r.materials.map((m): Row => ({
             material: m,
             courseName: c.course.name,
             courseCode: c.course.code,
-            courseColor: courseColor(c.course.id, i),
+            courseColor: courseColor(c.course.id),
           }));
         } catch {
           return [] as Row[];
