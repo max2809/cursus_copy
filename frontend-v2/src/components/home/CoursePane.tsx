@@ -6,6 +6,7 @@ import { IconMax, IconRefresh, IconTrash, IconPlus } from "../../design/icons";
 import { courseColor } from "../shell/Sidebar";
 import { AddMaterialModal } from "../materials/AddMaterialModal";
 import { addUrlMaterial, uploadMaterial } from "../../api/materials";
+import { Checkbox } from "./Checkbox";
 
 interface Props {
   course: CourseDeadlines;
@@ -188,46 +189,18 @@ export function CoursePane({
                 key={d.id}
                 className="upcoming-item"
                 style={{
+                  gridTemplateColumns: "auto 64px 1fr auto auto",
                   textDecoration: "none",
                   color: "inherit",
                   opacity: done ? 0.55 : 1,
                 }}
               >
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={done}
-                  aria-label={done ? "Mark as not done" : "Mark as done"}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setSubmission.mutate({
-                      deadlineId: d.id,
-                      done: !d.submitted,
-                    });
-                  }}
-                  style={{
-                    width: 18,
-                    height: 18,
-                    border: `2px solid ${done ? "var(--accent)" : "var(--hair-2)"}`,
-                    borderRadius: "50%",
-                    background: done ? "var(--accent)" : "transparent",
-                    color: "var(--accent-ink)",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    padding: 0,
-                    marginRight: 4,
-                    flexShrink: 0,
-                  }}
-                >
-                  {done && (
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                      <path d="M2 5 4 7 8 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </button>
+                <Checkbox
+                  checked={done}
+                  onToggle={() =>
+                    setSubmission.mutate({ deadlineId: d.id, done: !d.submitted })
+                  }
+                />
                 <div className="upcoming-date">
                   <div className="d">{parts.d}</div>
                   <div className="m">{parts.m}</div>
@@ -237,7 +210,7 @@ export function CoursePane({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="upcoming-body"
-                  style={{ textDecoration: "none", color: "inherit", flex: 1, minWidth: 0 }}
+                  style={{ textDecoration: "none", color: "inherit", minWidth: 0 }}
                 >
                   <div
                     className="title"
@@ -400,6 +373,44 @@ export function CoursePane({
                 >
                   ●
                 </span>
+                {m.source === "canvas" ? (
+                  <button
+                    className="iconbtn"
+                    title={`Download ${m.filename}`}
+                    type="button"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const base =
+                        (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+                        "http://localhost:8000";
+                      try {
+                        const resp = await fetch(
+                          `${base}/api/courses/${canvasId}/materials/${m.id}/download`,
+                          { credentials: "include" },
+                        );
+                        if (!resp.ok) {
+                          alert(`Download failed (${resp.status})`);
+                          return;
+                        }
+                        const blob = await resp.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = m.filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        URL.revokeObjectURL(url);
+                      } catch (err) {
+                        alert(`Download error: ${err}`);
+                      }
+                    }}
+                  >
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="13" height="13">
+                      <path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10" />
+                    </svg>
+                  </button>
+                ) : null}
                 {m.source === "upload" || m.source === "url" ? (
                   <button
                     className="iconbtn"

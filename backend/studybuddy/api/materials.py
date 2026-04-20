@@ -274,6 +274,56 @@ async def download_all_materials(
     )
 
 
+@router.get("/{file_id}/download")
+async def download_single_material(
+    canvas_course_id: int,
+    file_id: UUID,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream a single file's bytes back to the browser.
+
+    Canvas-sourced files are fetched with the user's PAT (the `url` on a File
+    is a Canvas-signed redirect that respects Bearer auth). Uploads and
+    canvas_pages have no persisted body on our side, so they 404.
+    """
+    if user.pat_encrypted is None or user.pat_nonce is None:
+        raise HTTPException(status_code=400, detail="connect your Canvas PAT first")
+    settings = get_settings()
+    course = await resolve_course(db, user=user, canvas_course_id=canvas_course_id)
+    f = (
+        await db.execute(
+            select(FileModel).where(
+                FileModel.id == file_id,
+                FileModel.course_id == course.id,
+                FileModel.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if f is None:
+        raise HTTPException(status_code=404, detail="file not found")
+    if f.source != "canvas" or not f.url:
+        raise HTTPException(status_code=404, detail="no downloadable body for this material")
+
+    pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            resp = await client.get(
+                f.url, headers={"Authorization": f"Bearer {pat}"}
+            )
+            resp.raise_for_status()
+    except Exception as e:
+        logger.warning("download_single: fetch failed for %s: %s", f.filename, e)
+        raise HTTPException(status_code=502, detail="failed to fetch from Canvas")
+
+    filename = _safe_filename(f.filename)
+    return StreamingResponse(
+        iter([resp.content]),
+        media_type=f.content_type or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.post("/refresh", response_model=MaterialsListResponse)
 async def refresh_materials(
     canvas_course_id: int,

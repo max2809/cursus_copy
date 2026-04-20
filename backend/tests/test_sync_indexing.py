@@ -23,7 +23,7 @@ async def test_sync_returns_pending_indexing_for_new_files(db, httpx_mock):
     user = await _user(db)
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
         json=[{"id": 10, "name": "CS", "course_code": "CS101"}],
     )
     httpx_mock.add_response(
@@ -63,7 +63,7 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
     user = await _user(db)
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
         json=[{"id": 10, "name": "CS"}],
     )
     httpx_mock.add_response(
@@ -100,7 +100,7 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
     # Second sync: mock everything again (pytest-httpx consumes responses).
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
         json=[{"id": 10, "name": "CS"}],
     )
     httpx_mock.add_response(
@@ -135,7 +135,7 @@ async def test_sync_reindexes_on_description_hash_drift(db, httpx_mock):
     for body in ("orig", "updated"):
         httpx_mock.add_response(
             method="GET",
-            url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
+            url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
             json=[{"id": 10, "name": "CS"}],
         )
         httpx_mock.add_response(

@@ -22,7 +22,7 @@ async def test_sync_inserts_courses_deadlines_files(db, httpx_mock):
 
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
         json=[{"id": 10, "name": "Algorithms", "course_code": "CS101"}],
     )
     httpx_mock.add_response(
@@ -74,7 +74,7 @@ async def test_sync_is_idempotent(db, httpx_mock):
     for _ in range(2):
         httpx_mock.add_response(
             method="GET",
-            url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
+            url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
             json=[{"id": 10, "name": "Algorithms"}],
         )
         httpx_mock.add_response(
@@ -108,7 +108,7 @@ async def test_sync_401_clears_pat(db, httpx_mock):
     user = await _user_with_pat(db)
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state=active&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
         status_code=401,
     )
     with pytest.raises(Exception):

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { BucketKey, CourseDeadlines, Deadline, DeadlineCourse } from "../api/types";
 import { useSetDeadlineSubmission } from "../api/queries";
+import { Checkbox } from "../components/home/Checkbox";
 import { courseColor } from "../components/shell/Sidebar";
 
 interface Props {
@@ -114,43 +115,19 @@ export function PlanView({ courses }: Props) {
                   <div
                     key={row.deadline.id}
                     className="upcoming-item"
-                    style={{ textDecoration: "none", color: "inherit", opacity: done ? 0.55 : 1 }}
+                    style={{
+                      gridTemplateColumns: "auto 64px 1fr auto auto",
+                      textDecoration: "none",
+                      color: "inherit",
+                      opacity: done ? 0.55 : 1,
+                    }}
                   >
-                    <button
-                      type="button"
-                      role="checkbox"
-                      aria-checked={done}
-                      aria-label={done ? "Mark as not done" : "Mark as done"}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setSubmission.mutate({
-                          deadlineId: row.deadline.id,
-                          done: !done,
-                        });
-                      }}
-                      style={{
-                        width: 18,
-                        height: 18,
-                        border: `2px solid ${done ? "var(--accent)" : "var(--hair-2)"}`,
-                        borderRadius: "50%",
-                        background: done ? "var(--accent)" : "transparent",
-                        color: "var(--accent-ink)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        cursor: "pointer",
-                        padding: 0,
-                        marginRight: 4,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {done && (
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                          <path d="M2 5 4 7 8 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </button>
+                    <Checkbox
+                      checked={done}
+                      onToggle={() =>
+                        setSubmission.mutate({ deadlineId: row.deadline.id, done: !done })
+                      }
+                    />
                     <div className="upcoming-date">
                       <div
                         className="d"

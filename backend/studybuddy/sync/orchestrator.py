@@ -41,9 +41,16 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
     client = CanvasClient(base_url=user.canvas_base_url, token=pat)
 
     try:
+        # Fetch every course the student has ever touched on Canvas, not just
+        # currently-active ones. Concluded courses land in the sidebar as
+        # status="hidden" so the user can still pull them back in via the
+        # sidebar's Hidden section if they want chat access on old material.
         courses_payload = await client.get_paginated(
             "/api/v1/courses",
-            params={"enrollment_state": "active", "include[]": "term"},
+            params={
+                "enrollment_state[]": ["active", "completed", "invited_or_pending"],
+                "include[]": "term",
+            },
         )
     except CanvasUnauthorized:
         user.pat_encrypted = None
@@ -212,6 +219,12 @@ async def _upsert_course(db: AsyncSession, user_id, payload: dict) -> None:
         select(Course).where(Course.user_id == user_id, Course.canvas_course_id == payload["id"])
     )).scalar_one_or_none()
     start_date, end_date = _course_dates(payload)
+    # Canvas workflow_state on a course: "unpublished" | "available" | "completed" | "deleted".
+    # Default new completed/deleted courses to "hidden" so they land in the sidebar's
+    # Hidden section; the user can unhide/promote if they want chat access on old
+    # material. Anything else gets "taking" so the current semester flows through normally.
+    workflow = (payload.get("workflow_state") or "").lower()
+    default_status = "hidden" if workflow in ("completed", "deleted") else "taking"
     if existing is None:
         db.add(Course(
             user_id=user_id,
@@ -220,12 +233,14 @@ async def _upsert_course(db: AsyncSession, user_id, payload: dict) -> None:
             code=payload.get("course_code"),
             start_date=start_date,
             end_date=end_date,
+            status=default_status,
             synced_at=datetime.now(timezone.utc),
         ))
     else:
         existing.name = payload.get("name") or existing.name
         existing.code = payload.get("course_code") or existing.code
-        # Always refresh dates so a term update in Canvas propagates.
+        # Always refresh dates so a term update in Canvas propagates. Do NOT
+        # touch `status` — that's user-controlled once the row exists.
         existing.start_date = start_date
         existing.end_date = end_date
         existing.synced_at = datetime.now(timezone.utc)
