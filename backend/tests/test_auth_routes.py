@@ -28,6 +28,22 @@ async def test_magic_link_sends_email_for_known_email(client, db, httpx_mock):
 
 
 @pytest.mark.asyncio
+async def test_magic_link_lookup_is_case_insensitive(client, db, httpx_mock):
+    httpx_mock.add_response(
+        method="POST", url="https://api.resend.com/emails",
+        json={"id": "e"}, status_code=200,
+    )
+    db.add(User(email="a@eur.nl"))
+    await db.commit()
+
+    resp = await client.post("/api/auth/magic-link", json={"email": "A@eur.nl"})
+    assert resp.status_code == 200
+
+    rows = (await db.execute(select(MagicLinkToken))).scalars().all()
+    assert len(rows) == 1, "uppercase local-part should still match the lowercase row"
+
+
+@pytest.mark.asyncio
 async def test_verify_creates_session_cookie(client, db, httpx_mock):
     httpx_mock.add_response(
         method="POST", url="https://api.resend.com/emails",

@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from studybuddy.auth.magic_link import create_magic_link, verify_magic_link
 from studybuddy.auth.session import create_session, delete_session
@@ -29,7 +29,12 @@ class VerifyRequest(BaseModel):
 @router.post("/magic-link")
 async def request_magic_link(payload: MagicLinkRequest, db: AsyncSession = Depends(get_db)):
     settings = get_settings()
-    user = (await db.execute(select(User).where(User.email == payload.email))).scalar_one_or_none()
+    # Email lookup is case-insensitive: Pydantic's EmailStr preserves local-part case,
+    # so "Alice@example.com" and "alice@example.com" would otherwise miss each other.
+    email = payload.email.lower()
+    user = (
+        await db.execute(select(User).where(func.lower(User.email) == email))
+    ).scalar_one_or_none()
     if user is None:
         return {"ok": True}  # don't leak allowlist
 
@@ -39,7 +44,7 @@ async def request_magic_link(payload: MagicLinkRequest, db: AsyncSession = Depen
     # Never let a Resend failure change the response: a 200 for unknown emails
     # and a 500 for known emails would leak the allowlist. Log and swallow.
     try:
-        await resend.send_magic_link(to=payload.email, link=link)
+        await resend.send_magic_link(to=email, link=link)
     except Exception:
         logger.exception("resend send_magic_link failed for an allowlisted user")
     await db.commit()
