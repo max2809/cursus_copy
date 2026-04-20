@@ -3,14 +3,11 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from studybuddy.api.materials import enqueue_pending_indexing
 from studybuddy.auth.deps import current_user
-from studybuddy.canvas.client import CanvasUnauthorized
 from studybuddy.config import get_settings
 from studybuddy.db.base import get_db
 from studybuddy.db.models import Course, Deadline, User
-from studybuddy.security.crypto import decrypt_pat
-from studybuddy.sync.orchestrator import SyncResult, sync_user
+from studybuddy.sync.background import is_syncing, sync_and_index_background
 
 
 router = APIRouter(prefix="/api", tags=["deadlines"])
@@ -45,16 +42,10 @@ async def get_deadlines(
         user.last_synced_at is None
         or _as_utc(user.last_synced_at) < datetime.now(timezone.utc) - timedelta(minutes=STALE_MINUTES)
     )
-    if stale and user.pat_encrypted is not None:
-        try:
-            result = await sync_user(db, user, master_key=settings.master_key_bytes())
-            await db.commit()
-            pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
-            enqueue_pending_indexing(background, user=user, pat=pat, result=result)
-        except CanvasUnauthorized:
-            await db.commit()
-        except Exception:
-            await db.rollback()
+    if stale and user.pat_encrypted is not None and not is_syncing(user.id):
+        # Fire sync in the background so the dashboard never blocks. The
+        # poller will see courses appear as each per-course commit lands.
+        background.add_task(sync_and_index_background, user.id, settings.master_key_bytes())
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=RECENT_CUTOFF_DAYS)
     course_end_cutoff = date.today() - timedelta(days=COURSE_END_GRACE_DAYS)
@@ -160,4 +151,7 @@ async def get_deadlines(
     return {
         "courses": courses_sorted,
         "last_synced_at": _as_utc(user.last_synced_at).isoformat() if user.last_synced_at else None,
+        # True while a background sync is running for this user. The dashboard
+        # polls while this is true so per-course commits show up live.
+        "syncing": is_syncing(user.id),
     }

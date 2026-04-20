@@ -1,5 +1,5 @@
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from studybuddy.auth.deps import current_user
@@ -7,7 +7,7 @@ from studybuddy.config import get_settings
 from studybuddy.db.base import get_db
 from studybuddy.db.models import User
 from studybuddy.security.crypto import encrypt_pat
-from studybuddy.sync.orchestrator import sync_user
+from studybuddy.sync.background import sync_and_index_background
 
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
@@ -20,9 +20,14 @@ class PATPayload(BaseModel):
 @router.post("/pat")
 async def submit_pat(
     payload: PATPayload,
+    background: BackgroundTasks,
     user: User = Depends(current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    """Validate the PAT against Canvas, store it encrypted, and fire a background
+    sync + indexing pass. Returns immediately so the frontend can move on to the
+    dashboard — polling /api/deadlines shows courses filling in live.
+    """
     settings = get_settings()
     pat = payload.pat.strip()
 
@@ -38,8 +43,7 @@ async def submit_pat(
     ct, nonce = encrypt_pat(pat, settings.master_key_bytes())
     user.pat_encrypted = ct
     user.pat_nonce = nonce
-    await db.flush()
-
-    await sync_user(db, user, master_key=settings.master_key_bytes())
     await db.commit()
+
+    background.add_task(sync_and_index_background, user.id, settings.master_key_bytes())
     return {"ok": True}

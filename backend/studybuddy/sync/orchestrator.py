@@ -54,6 +54,10 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
     for c in courses_payload:
         await _upsert_course(db, user.id, c)
 
+    # Commit the course list so the dashboard poller can show "0 of N courses"
+    # even before any course's details are fetched.
+    await db.commit()
+
     courses = (await db.execute(select(Course).where(Course.user_id == user.id))).scalars().all()
     for course in courses:
         assignments = await _safe_get(
@@ -115,6 +119,10 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
                         title=item.get("title") or page_url,
                         html_url=item.get("html_url") or "",
                     )
+
+        # Commit after each course so a dashboard poller sees courses fill in
+        # live as the background sync progresses.
+        await db.commit()
 
     user.last_synced_at = datetime.now(timezone.utc)
     await db.flush()

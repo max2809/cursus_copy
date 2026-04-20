@@ -34,6 +34,7 @@ export interface CourseDeadlines {
 export interface DeadlinesResponse {
   courses: CourseDeadlines[];
   last_synced_at: string | null;
+  syncing?: boolean;
 }
 
 export type MaterialSource = "canvas" | "canvas_page" | "upload" | "url";

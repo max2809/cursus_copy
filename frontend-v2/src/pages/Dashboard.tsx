@@ -114,6 +114,7 @@ export default function Dashboard() {
   }
 
   const userInitials = initialsOf(email);
+  const isSyncing = !!data.syncing || !data.last_synced_at;
 
   const topbar = (
     <div className="topbar">
@@ -209,9 +210,51 @@ export default function Dashboard() {
       />
       <div className="main">
         {topbar}
+        {isSyncing && <SyncingBanner courseCount={courses.length} />}
         <div className="content">{content}</div>
         <MobileNav active={navParam} onNav={setNav} />
       </div>
+    </div>
+  );
+}
+
+function SyncingBanner({ courseCount }: { courseCount: number }) {
+  const label =
+    courseCount === 0
+      ? "Syncing your courses from Canvas…"
+      : `Syncing your courses from Canvas… ${courseCount} loaded so far`;
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        padding: "8px var(--pad-4)",
+        background: "var(--accent-soft)",
+        color: "var(--accent)",
+        borderBottom: "1px solid var(--hair)",
+        fontSize: 13,
+        fontWeight: 500,
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: "var(--accent)",
+          boxShadow: "0 0 0 0 currentColor",
+          animation: "sync-pulse 1.4s ease-in-out infinite",
+        }}
+      />
+      <span>{label}</span>
+      <style>{`
+        @keyframes sync-pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50%       { opacity: 0.35; transform: scale(0.72); }
+        }
+      `}</style>
     </div>
   );
 }

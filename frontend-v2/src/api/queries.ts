@@ -7,6 +7,14 @@ export function useDeadlines() {
     queryKey: ["deadlines"],
     queryFn: () => apiFetch<DeadlinesResponse>("/api/deadlines"),
     retry: false,
+    // Poll every 3s while the backend is still syncing so courses fill in live.
+    // Stops once last_synced_at is set AND `syncing` flips to false.
+    refetchInterval: (query) => {
+      const d = query.state.data;
+      if (!d) return false;
+      if (d.syncing || !d.last_synced_at) return 3000;
+      return false;
+    },
   });
 }
 
