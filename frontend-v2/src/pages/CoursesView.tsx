@@ -11,10 +11,60 @@ const STATUS_LABEL: Record<CourseStatus, string> = {
 
 const STATUS_ORDER: CourseStatus[] = ["taking", "taken", "hidden"];
 
+// Per-status color tokens used on the pill toggles + count summary.
+// taking  = accent (Erasmus green); taken = warm orange; hidden = muted.
+interface StatusTokens {
+  fg: string;
+  bg: string;
+  border: string;
+}
+const STATUS_TOKENS: Record<CourseStatus, StatusTokens> = {
+  taking: {
+    fg: "var(--accent)",
+    bg: "var(--accent-soft)",
+    border: "var(--accent)",
+  },
+  taken: {
+    fg: "oklch(55% 0.14 50)",
+    bg: "oklch(95% 0.04 50)",
+    border: "oklch(70% 0.14 50)",
+  },
+  hidden: {
+    fg: "var(--ink-2)",
+    bg: "var(--bg-sunken)",
+    border: "var(--hair-2)",
+  },
+};
+
+const EXIT_MS = 260;
+
 export function CoursesView() {
   const { data, isLoading, error } = useCourses();
   const updateStatus = useUpdateCourseStatus();
   const [query, setQuery] = useState("");
+  // course.id → target status while the row is animating out of its current section
+  const [leaving, setLeaving] = useState<Map<string, CourseStatus>>(new Map());
+
+  function requestChange(c: CourseSummary, next: CourseStatus) {
+    if (c.status === next) return;
+    setLeaving((prev) => new Map(prev).set(c.id, next));
+    window.setTimeout(() => {
+      updateStatus.mutate(
+        { canvasCourseId: c.canvas_course_id, status: next },
+        {
+          onSettled: () => {
+            // Clear the leaving mark once the fresh query result lands so the
+            // row appears in its new section (no stale animation state left).
+            setLeaving((prev) => {
+              const n = new Map(prev);
+              n.delete(c.id);
+              return n;
+            });
+          },
+        },
+      );
+    }, EXIT_MS);
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -56,6 +106,18 @@ export function CoursesView() {
         height: "100%",
       }}
     >
+      <style>{`
+        @keyframes course-row-leave {
+          0%   { opacity: 1; transform: translateY(0); max-height: 80px; }
+          100% { opacity: 0; transform: translateY(24px); max-height: 0; border-bottom-width: 0; padding-top: 0; padding-bottom: 0; }
+        }
+        .course-row-leaving {
+          animation: course-row-leave ${EXIT_MS}ms cubic-bezier(.4,0,.2,1) forwards;
+          overflow: hidden;
+          pointer-events: none;
+        }
+      `}</style>
+
       <h1
         style={{
           fontFamily: "var(--font-serif)",
@@ -86,10 +148,14 @@ export function CoursesView() {
         }}
       >
         <span>
-          <strong style={{ color: "var(--accent)" }}>{counts.taking}</strong> taking
+          <strong style={{ color: STATUS_TOKENS.taking.fg }}>{counts.taking}</strong>{" "}
+          taking
         </span>
         <span>·</span>
-        <span>{counts.taken} taken</span>
+        <span>
+          <strong style={{ color: STATUS_TOKENS.taken.fg }}>{counts.taken}</strong>{" "}
+          taken
+        </span>
         <span>·</span>
         <span>{counts.hidden} hidden</span>
         <div style={{ flex: 1 }} />
@@ -146,12 +212,8 @@ export function CoursesView() {
                       course={c}
                       color={courseColor(c.id, i)}
                       isLast={i === rows.length - 1}
-                      onChange={(next) =>
-                        updateStatus.mutate({
-                          canvasCourseId: c.canvas_course_id,
-                          status: next,
-                        })
-                      }
+                      leaving={leaving.has(c.id)}
+                      onChange={(next) => requestChange(c, next)}
                     />
                   ))}
                 </div>
@@ -195,12 +257,14 @@ interface RowProps {
   course: CourseSummary;
   color: string;
   isLast: boolean;
+  leaving: boolean;
   onChange: (next: CourseStatus) => void;
 }
 
-function CourseRow({ course, color, isLast, onChange }: RowProps) {
+function CourseRow({ course, color, isLast, leaving, onChange }: RowProps) {
   return (
     <div
+      className={leaving ? "course-row-leaving" : undefined}
       style={{
         display: "grid",
         gridTemplateColumns: "auto 1fr auto",
@@ -247,30 +311,33 @@ function CourseRow({ course, color, isLast, onChange }: RowProps) {
         )}
       </div>
       <div style={{ display: "flex", gap: 4 }}>
-        {STATUS_ORDER.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onChange(s)}
-            title={STATUS_LABEL[s]}
-            style={{
-              padding: "5px 12px",
-              border: `1px solid ${course.status === s ? "var(--accent)" : "var(--hair)"}`,
-              background:
-                course.status === s ? "var(--accent-soft)" : "transparent",
-              color: course.status === s ? "var(--accent)" : "var(--ink-3)",
-              fontSize: 11,
-              fontWeight: course.status === s ? 600 : 500,
-              letterSpacing: "0.02em",
-              borderRadius: "var(--r-pill)",
-              cursor: "pointer",
-              textTransform: "capitalize",
-              transition: "all var(--fast)",
-            }}
-          >
-            {s}
-          </button>
-        ))}
+        {STATUS_ORDER.map((s) => {
+          const active = course.status === s;
+          const tok = STATUS_TOKENS[s];
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onChange(s)}
+              title={STATUS_LABEL[s]}
+              style={{
+                padding: "5px 12px",
+                border: `1px solid ${active ? tok.border : "var(--hair)"}`,
+                background: active ? tok.bg : "transparent",
+                color: active ? tok.fg : "var(--ink-3)",
+                fontSize: 11,
+                fontWeight: active ? 600 : 500,
+                letterSpacing: "0.02em",
+                borderRadius: "var(--r-pill)",
+                cursor: "pointer",
+                textTransform: "capitalize",
+                transition: "all var(--fast)",
+              }}
+            >
+              {s}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
