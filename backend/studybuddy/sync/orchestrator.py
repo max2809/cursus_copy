@@ -60,6 +60,11 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
 
     courses = (await db.execute(select(Course).where(Course.user_id == user.id))).scalars().all()
     for course in courses:
+        # Skip deep sync for courses the user has archived or hidden. Canvas
+        # doesn't change their content anymore (past semester) — nothing to
+        # refetch. User can flip back to "taking" to re-enable sync.
+        if course.status != "taking":
+            continue
         assignments = await _safe_get(
             client,
             f"/api/v1/courses/{course.canvas_course_id}/assignments",
@@ -138,10 +143,17 @@ async def _pending_indexing(db: AsyncSession, user: User) -> SyncResult:
     Deadlines: description is non-empty AND
                (description_hash is NULL OR hash(description) != description_hash).
     """
+    # Only index files/deadlines belonging to currently-taking courses.
+    # Archived and hidden courses keep their existing chunks but don't re-index.
     pending_files = (await db.execute(
-        select(FileModel.id).where(
+        select(FileModel.id)
+        .join(Course, FileModel.course_id == Course.id, isouter=True)
+        .where(
             FileModel.user_id == user.id,
             FileModel.deleted_at.is_(None),
+            # Uploads with no course association (course_id NULL) always index;
+            # course-bound files index only if their course is "taking".
+            (FileModel.course_id.is_(None) | (Course.status == "taking")),
             (
                 FileModel.indexed_at.is_(None)
                 | (FileModel.index_version.is_(None))
@@ -155,7 +167,12 @@ async def _pending_indexing(db: AsyncSession, user: User) -> SyncResult:
     )).scalars().all()
 
     deadline_rows = (await db.execute(
-        select(Deadline).where(Deadline.user_id == user.id)
+        select(Deadline)
+        .join(Course, Deadline.course_id == Course.id, isouter=True)
+        .where(
+            Deadline.user_id == user.id,
+            (Deadline.course_id.is_(None) | (Course.status == "taking")),
+        )
     )).scalars().all()
     pending_deadlines: list = []
     for d in deadline_rows:

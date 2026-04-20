@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CourseDeadlines, Deadline, MaterialItem } from "../../api/types";
 import { listMaterials, deleteMaterial, refreshMaterials } from "../../api/materials";
+import { useSetDeadlineSubmission } from "../../api/queries";
 import { IconMax, IconRefresh, IconTrash, IconPlus } from "../../design/icons";
 import { courseColor } from "../shell/Sidebar";
 import { AddMaterialModal } from "../materials/AddMaterialModal";
@@ -46,10 +47,11 @@ function flattenUpcoming(course: CourseDeadlines): Deadline[] {
   const out: Deadline[] = [];
   for (const k of order) {
     for (const d of course.buckets[k] ?? []) {
-      if (!d.submitted) out.push(d);
+      out.push(d);
     }
   }
-  return out;
+  // Pending first, submitted after — within each group, the buckets preserve urgency order.
+  return out.sort((a, b) => Number(!!a.submitted) - Number(!!b.submitted));
 }
 
 const MAT_FILTERS = ["All", "Canvas", "Uploads", "Links"] as const;
@@ -91,6 +93,8 @@ export function CoursePane({
   const [filter, setFilter] = useState<MatFilter>("All");
   const [addOpen, setAddOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const setSubmission = useSetDeadlineSubmission();
   const canvasId = course.course.canvas_course_id;
 
   async function reload() {
@@ -178,30 +182,79 @@ export function CoursePane({
             const kind = kindOf(d);
             const parts = d.due_at ? formatDate(d.due_at) : { d: "—", m: "" };
             const eta = d.due_at ? etaFromNow(d.due_at) : "no due date";
+            const done = !!d.submitted;
             return (
-              <a
+              <div
                 key={d.id}
-                href={d.url}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="upcoming-item"
-                style={{ textDecoration: "none", color: "inherit" }}
+                style={{
+                  textDecoration: "none",
+                  color: "inherit",
+                  opacity: done ? 0.55 : 1,
+                }}
               >
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={done}
+                  aria-label={done ? "Mark as not done" : "Mark as done"}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setSubmission.mutate({
+                      deadlineId: d.id,
+                      done: !d.submitted,
+                    });
+                  }}
+                  style={{
+                    width: 18,
+                    height: 18,
+                    border: `2px solid ${done ? "var(--accent)" : "var(--hair-2)"}`,
+                    borderRadius: "50%",
+                    background: done ? "var(--accent)" : "transparent",
+                    color: "var(--accent-ink)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    padding: 0,
+                    marginRight: 4,
+                    flexShrink: 0,
+                  }}
+                >
+                  {done && (
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 5 4 7 8 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                </button>
                 <div className="upcoming-date">
                   <div className="d">{parts.d}</div>
                   <div className="m">{parts.m}</div>
                 </div>
-                <div className="upcoming-body">
-                  <div className="title">{d.title}</div>
+                <a
+                  href={d.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="upcoming-body"
+                  style={{ textDecoration: "none", color: "inherit", flex: 1, minWidth: 0 }}
+                >
+                  <div
+                    className="title"
+                    style={{ textDecoration: done ? "line-through" : "none" }}
+                  >
+                    {d.title}
+                  </div>
                   <div className="sub">
                     {d.points_possible != null ? `${d.points_possible} pts` : kind}
+                    {d.manually_submitted && !d.submitted ? " · marked done" : null}
                   </div>
-                </div>
+                </a>
                 <span className="upcoming-type" data-kind={kind}>
                   {kind}
                 </span>
-                <span className="upcoming-eta">{eta}</span>
-              </a>
+                <span className="upcoming-eta">{done ? "done" : eta}</span>
+              </div>
             );
           })
         )}
@@ -225,6 +278,54 @@ export function CoursePane({
               </button>
             ))}
           </div>
+          <button
+            className="iconbtn"
+            title="Download all Canvas files as zip"
+            onClick={async () => {
+              if (downloading) return;
+              setDownloading(true);
+              try {
+                const base =
+                  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+                  "http://localhost:8000";
+                const resp = await fetch(
+                  `${base}/api/courses/${canvasId}/materials/download`,
+                  { credentials: "include" },
+                );
+                if (!resp.ok) {
+                  const text = await resp.text().catch(() => "");
+                  alert(`Download failed (${resp.status}): ${text || resp.statusText}`);
+                  return;
+                }
+                const blob = await resp.blob();
+                const cd = resp.headers.get("content-disposition") ?? "";
+                const match = cd.match(/filename="?([^"]+)"?/i);
+                const filename = match?.[1] ?? `${course.course.name}.zip`;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                alert(`Download error: ${err}`);
+              } finally {
+                setDownloading(false);
+              }
+            }}
+            disabled={downloading}
+            type="button"
+          >
+            {downloading ? (
+              <span style={{ fontSize: 11 }}>…</span>
+            ) : (
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width="14" height="14">
+                <path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13.5h10" />
+              </svg>
+            )}
+          </button>
           <button
             className="iconbtn"
             title="Refresh"

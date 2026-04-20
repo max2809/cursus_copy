@@ -22,9 +22,6 @@ import {
   IconClose,
   IconCopy,
   IconDown,
-  IconEllipsis,
-  IconList,
-  IconMax,
   IconPlus,
   IconQuiz,
   IconRefresh,
@@ -35,18 +32,16 @@ import {
 interface Props {
   canvasCourseId: number;
   courseName: string;
-  maximized?: boolean;
-  onMaximize?: () => void;
+  onCollapse?: () => void;
   userInitials?: string;
 }
 
-type ChatMode = "tutor" | "explain" | "quiz" | "summarize";
+type ChatMode = "tutor" | "quiz" | "flashcards";
 
 const MODES: { id: ChatMode; label: string; hint: string; Icon: (p: any) => JSX.Element }[] = [
-  { id: "tutor", label: "Tutor", hint: "Socratic", Icon: IconChat },
-  { id: "explain", label: "Explain", hint: "Grounded", Icon: IconBook },
+  { id: "tutor", label: "Tutor", hint: "Socratic explanation with citations", Icon: IconChat },
   { id: "quiz", label: "Quiz me", hint: "Practice MCQ", Icon: IconQuiz },
-  { id: "summarize", label: "Summarize", hint: "Key takeaways", Icon: IconList },
+  { id: "flashcards", label: "Make flashcards", hint: "Turn this into flashcards", Icon: IconCards },
 ];
 
 function formatTime(iso: string): string {
@@ -56,8 +51,7 @@ function formatTime(iso: string): string {
 export function ChatPane({
   canvasCourseId,
   courseName,
-  maximized,
-  onMaximize,
+  onCollapse,
   userInitials = "You",
 }: Props) {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -235,101 +229,11 @@ export function ChatPane({
       label: "Make flashcards",
       hint: `Turn the most recent ${courseName} lecture into 10 flashcards`,
     },
-    {
-      icon: <IconList />,
-      label: "Summarize",
-      hint: `Give me the key takeaways from the newest ${courseName} material`,
-    },
   ];
 
   return (
     <div className="chat-pane">
-      <div className="chat-head">
-        <div className="title">
-          <span className="live" />
-          Ask Cursus · {courseName}
-        </div>
-        <div className="chat-head-actions" style={{ position: "relative" }}>
-          <button
-            className="iconbtn"
-            title="Session history"
-            onClick={() => setSessionMenuOpen((v) => !v)}
-            type="button"
-          >
-            <IconEllipsis />
-          </button>
-          {onMaximize && (
-            <button
-              className="iconbtn"
-              title={maximized ? "Restore" : "Focus chat"}
-              onClick={onMaximize}
-              type="button"
-            >
-              <IconMax />
-            </button>
-          )}
-          <button
-            className="iconbtn"
-            title="New chat"
-            onClick={handleNewChat}
-            type="button"
-          >
-            <IconPlus />
-          </button>
-          {sessionMenuOpen && sessions.length > 0 && (
-            <div
-              style={{
-                position: "absolute",
-                top: "calc(100% + 4px)",
-                right: 0,
-                background: "var(--bg-elev)",
-                border: "1px solid var(--hair)",
-                borderRadius: "var(--r-md)",
-                boxShadow: "var(--shadow-md)",
-                minWidth: 220,
-                maxHeight: 320,
-                overflowY: "auto",
-                padding: 4,
-                zIndex: 20,
-              }}
-              onMouseLeave={() => setSessionMenuOpen(false)}
-            >
-              {sessions.map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => {
-                    setSessionId(s.id);
-                    setSessionMenuOpen(false);
-                  }}
-                  style={{
-                    display: "block",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: "6px 10px",
-                    fontSize: 13,
-                    border: "none",
-                    background:
-                      s.id === sessionId ? "var(--accent-soft)" : "transparent",
-                    color: s.id === sessionId ? "var(--accent)" : "var(--ink)",
-                    borderRadius: "var(--r-sm)",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {s.title || "Untitled"}
-                  </div>
-                  <div style={{ fontSize: 10, color: "var(--ink-3)", fontFamily: "var(--font-mono)" }}>
-                    {new Date(s.updated_at).toLocaleString()}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mode-bar">
+      <div className="mode-bar" style={{ position: "relative" }}>
         {MODES.map((m) => {
           const Icon = m.Icon;
           return (
@@ -345,6 +249,87 @@ export function ChatPane({
             </button>
           );
         })}
+        <div style={{ flex: 1 }} />
+        <button
+          className="iconbtn"
+          title="New chat"
+          onClick={handleNewChat}
+          type="button"
+        >
+          <IconPlus />
+        </button>
+        {sessions.length > 0 && (
+          <button
+            className="iconbtn"
+            title="Session history"
+            onClick={() => setSessionMenuOpen((v) => !v)}
+            type="button"
+          >
+            <IconChat />
+          </button>
+        )}
+        {onCollapse && (
+          <button
+            className="iconbtn"
+            title="Hide chat"
+            onClick={onCollapse}
+            type="button"
+          >
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 3l-5 5 5 5" />
+            </svg>
+          </button>
+        )}
+        {sessionMenuOpen && sessions.length > 0 && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              right: 8,
+              background: "var(--bg-elev)",
+              border: "1px solid var(--hair)",
+              borderRadius: "var(--r-md)",
+              boxShadow: "var(--shadow-md)",
+              minWidth: 240,
+              maxHeight: 320,
+              overflowY: "auto",
+              padding: 4,
+              zIndex: 20,
+            }}
+            onMouseLeave={() => setSessionMenuOpen(false)}
+          >
+            {sessions.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setSessionId(s.id);
+                  setSessionMenuOpen(false);
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "6px 10px",
+                  fontSize: 13,
+                  border: "none",
+                  background:
+                    s.id === sessionId ? "var(--accent-soft)" : "transparent",
+                  color: s.id === sessionId ? "var(--accent)" : "var(--ink)",
+                  borderRadius: "var(--r-sm)",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {s.title || "Untitled"}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--ink-3)", fontFamily: "var(--font-mono)" }}>
+                  {new Date(s.updated_at).toLocaleString()}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {isEmpty ? (

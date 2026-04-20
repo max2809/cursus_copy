@@ -95,7 +95,7 @@ export function LibraryView({ courses }: Props) {
   }, [rows, filter, query]);
 
   return (
-    <div style={{ padding: "var(--pad-5) var(--pad-4)", maxWidth: 1100, margin: "0 auto" }}>
+    <div style={{ padding: "var(--pad-5) var(--pad-5)", width: "100%", overflowY: "auto", height: "100%" }}>
       <h1
         style={{
           fontFamily: "var(--font-serif)",

@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { useDeadlines, useSync } from "../api/queries";
+import { useCourses, useDeadlines, useSync, useUpdateCourseStatus } from "../api/queries";
 import { ChatPane } from "../components/chat-v2/ChatPane";
 import { CoursePane } from "../components/home/CoursePane";
 import { MobileNav } from "../components/shell/MobileNav";
@@ -33,7 +33,24 @@ export default function Dashboard() {
   const courseParam = params.get("course");
   const { data, isLoading, error, refetch } = useDeadlines();
   const sync = useSync();
+  const courseList = useCourses();
+  const updateStatus = useUpdateCourseStatus();
   const [email] = useState<string | undefined>(getUserEmail());
+  const [chatWidth, setChatWidth] = useState<number>(() => {
+    try {
+      const v = Number(localStorage.getItem("cursus_chat_width"));
+      return Number.isFinite(v) && v >= 280 && v <= 900 ? v : 380;
+    } catch { return 380; }
+  });
+  const [chatHidden, setChatHidden] = useState<boolean>(() => {
+    try { return localStorage.getItem("cursus_chat_hidden") === "1"; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("cursus_chat_width", String(chatWidth)); } catch { /* ignore */ }
+  }, [chatWidth]);
+  useEffect(() => {
+    try { localStorage.setItem("cursus_chat_hidden", chatHidden ? "1" : "0"); } catch { /* ignore */ }
+  }, [chatHidden]);
 
   useEffect(() => {
     if (error instanceof ApiError && error.status === 401) {
@@ -172,8 +189,6 @@ export default function Dashboard() {
           <ChatPane
             canvasCourseId={activeCourse.course.canvas_course_id}
             courseName={activeCourse.course.name}
-            maximized
-            onMaximize={() => setNav("home")}
             userInitials={userInitials}
           />
         </div>
@@ -181,19 +196,62 @@ export default function Dashboard() {
     }
 
     if (!activeCourse) return <NoCourse />;
+    const clampedWidth = Math.max(280, Math.min(900, chatWidth));
+    const gridCols = chatHidden
+      ? "1fr"
+      : `1fr 4px ${clampedWidth}px`;
     return (
-      <div className="workspace">
+      <div className="workspace" style={{ gridTemplateColumns: gridCols, position: "relative" }}>
         <CoursePane
           course={activeCourse}
           courseIndex={activeCourseIndex}
           onMaximize={() => setNav("chat")}
         />
-        <ChatPane
-          canvasCourseId={activeCourse.course.canvas_course_id}
-          courseName={activeCourse.course.name}
-          onMaximize={() => setNav("chat")}
-          userInitials={userInitials}
-        />
+        {!chatHidden && (
+          <Resizer
+            onDrag={(deltaX) =>
+              setChatWidth((w) => Math.max(280, Math.min(900, w - deltaX)))
+            }
+          />
+        )}
+        {!chatHidden && (
+          <ChatPane
+            canvasCourseId={activeCourse.course.canvas_course_id}
+            courseName={activeCourse.course.name}
+            onCollapse={() => setChatHidden(true)}
+            userInitials={userInitials}
+          />
+        )}
+        {chatHidden && (
+          <button
+            type="button"
+            onClick={() => setChatHidden(false)}
+            title="Show chat"
+            style={{
+              position: "absolute",
+              right: 16,
+              bottom: 16,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "8px 14px",
+              background: "var(--accent)",
+              color: "var(--accent-ink)",
+              border: "none",
+              borderRadius: "var(--r-pill)",
+              fontSize: 13,
+              fontWeight: 600,
+              boxShadow: "var(--shadow-md)",
+              cursor: "pointer",
+              zIndex: 5,
+            }}
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5A1.5 1.5 0 0 1 11.5 11H7l-3 2.5V11A1.5 1.5 0 0 1 3 9.5v-5Z" />
+            </svg>
+            Show chat
+          </button>
+        )}
       </div>
     );
   })();
@@ -204,8 +262,12 @@ export default function Dashboard() {
         activeNav={navParam}
         onNav={setNav}
         courses={courses}
+        allCourses={courseList.data}
         activeCourseId={activeCourseId}
         onCourseSelect={setCourse}
+        onCourseStatusChange={(canvasCourseId, status) =>
+          updateStatus.mutate({ canvasCourseId, status })
+        }
         userEmail={email}
       />
       <div className="main">
@@ -256,6 +318,49 @@ function SyncingBanner({ courseCount }: { courseCount: number }) {
         }
       `}</style>
     </div>
+  );
+}
+
+function Resizer({ onDrag }: { onDrag: (deltaX: number) => void }) {
+  const [hover, setHover] = useState(false);
+  const [active, setActive] = useState(false);
+  const lastX = useRef(0);
+
+  useEffect(() => {
+    if (!active) return;
+    const onMove = (e: MouseEvent) => {
+      const dx = e.clientX - lastX.current;
+      lastX.current = e.clientX;
+      if (dx !== 0) onDrag(dx);
+    };
+    const onUp = () => setActive(false);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [active, onDrag]);
+
+  return (
+    <div
+      onMouseDown={(e) => {
+        e.preventDefault();
+        lastX.current = e.clientX;
+        setActive(true);
+      }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        cursor: "col-resize",
+        background: hover || active ? "var(--accent)" : "var(--hair)",
+        width: 4,
+        transition: "background var(--fast)",
+        userSelect: "none",
+      }}
+      role="separator"
+      aria-orientation="vertical"
+    />
   );
 }
 

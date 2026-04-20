@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
     from studybuddy.api.onboarding import router as onboarding_router
     from studybuddy.api.deadlines import router as deadlines_router
     from studybuddy.api.sync_route import router as sync_router
+    from studybuddy.api.courses import router as courses_router
     from studybuddy.api.materials import router as materials_router
     from studybuddy.api.chat_sessions import router as chat_sessions_router
     from studybuddy.api.chat_messages import router as chat_messages_router
@@ -37,6 +38,7 @@ def create_app() -> FastAPI:
     app.include_router(onboarding_router)
     app.include_router(deadlines_router)
     app.include_router(sync_router)
+    app.include_router(courses_router)
     app.include_router(materials_router)
     app.include_router(chat_sessions_router)
     app.include_router(chat_messages_router)

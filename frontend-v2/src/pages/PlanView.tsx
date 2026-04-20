@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { BucketKey, CourseDeadlines, Deadline, DeadlineCourse } from "../api/types";
+import { useSetDeadlineSubmission } from "../api/queries";
 import { courseColor } from "../components/shell/Sidebar";
 
 interface Props {
@@ -66,9 +67,10 @@ function formatDue(iso: string | null): string {
 export function PlanView({ courses }: Props) {
   const buckets = useMemo(() => aggregate(courses), [courses]);
   const nonEmpty = BUCKET_ORDER.filter((k) => (buckets.get(k)?.length ?? 0) > 0);
+  const setSubmission = useSetDeadlineSubmission();
 
   return (
-    <div style={{ padding: "var(--pad-5) var(--pad-4)", maxWidth: 960, margin: "0 auto" }}>
+    <div style={{ padding: "var(--pad-5) var(--pad-5)", width: "100%", overflowY: "auto", height: "100%" }}>
       <h1
         style={{
           fontFamily: "var(--font-serif)",
@@ -107,15 +109,48 @@ export function PlanView({ courses }: Props) {
               {buckets.get(k)!.map((row) => {
                 const color = courseColor(row.course.id, row.courseIndex);
                 const due = formatDue(row.deadline.due_at);
+                const done = !!row.deadline.submitted;
                 return (
-                  <a
+                  <div
                     key={row.deadline.id}
-                    href={row.deadline.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
                     className="upcoming-item"
-                    style={{ textDecoration: "none", color: "inherit" }}
+                    style={{ textDecoration: "none", color: "inherit", opacity: done ? 0.55 : 1 }}
                   >
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={done}
+                      aria-label={done ? "Mark as not done" : "Mark as done"}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSubmission.mutate({
+                          deadlineId: row.deadline.id,
+                          done: !done,
+                        });
+                      }}
+                      style={{
+                        width: 18,
+                        height: 18,
+                        border: `2px solid ${done ? "var(--accent)" : "var(--hair-2)"}`,
+                        borderRadius: "50%",
+                        background: done ? "var(--accent)" : "transparent",
+                        color: "var(--accent-ink)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginRight: 4,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {done && (
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M2 5 4 7 8 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </button>
                     <div className="upcoming-date">
                       <div
                         className="d"
@@ -136,7 +171,18 @@ export function PlanView({ courses }: Props) {
                         {row.course.code ?? row.course.name.slice(0, 8)}
                       </div>
                     </div>
-                    <div className="upcoming-body">
+                    <a
+                      href={row.deadline.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="upcoming-body"
+                      style={{
+                        textDecoration: done ? "line-through" : "none",
+                        color: "inherit",
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
                       <div className="title">{row.deadline.title}</div>
                       <div className="sub">
                         {row.course.name}
@@ -144,12 +190,12 @@ export function PlanView({ courses }: Props) {
                           <span> · {row.deadline.points_possible} pts</span>
                         )}
                       </div>
-                    </div>
+                    </a>
                     <span className="upcoming-type" data-kind={row.deadline.type}>
                       {row.deadline.type}
                     </span>
-                    <span className="upcoming-eta">{due}</span>
-                  </a>
+                    <span className="upcoming-eta">{done ? "done" : due}</span>
+                  </div>
                 );
               })}
             </div>

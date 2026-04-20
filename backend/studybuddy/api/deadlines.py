@@ -1,6 +1,8 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
+from uuid import UUID
 from zoneinfo import ZoneInfo
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from studybuddy.auth.deps import current_user
@@ -16,9 +18,6 @@ STALE_MINUTES = 30
 # Don't show deadlines older than this — hides items from past semesters
 # whose courses Canvas still reports as "active."
 RECENT_CUTOFF_DAYS = 30
-# Hide courses whose term ended more than this many days ago. A small grace
-# window lets resits / late-graded items still surface.
-COURSE_END_GRACE_DAYS = 14
 AMS = ZoneInfo("Europe/Amsterdam")
 BUCKET_ORDER = ("overdue", "today", "this_week", "next_two_weeks", "later", "no_due_date")
 
@@ -48,33 +47,25 @@ async def get_deadlines(
         background.add_task(sync_and_index_background, user.id, settings.master_key_bytes())
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=RECENT_CUTOFF_DAYS)
-    course_end_cutoff = date.today() - timedelta(days=COURSE_END_GRACE_DAYS)
 
-    # A course is "active" only if it has at least one dated deadline within
-    # the last 30 days or in the future. Courses whose only remaining items
-    # are null-due-at admin/resource rows get hidden, even if Canvas still
-    # reports them as active.
-    active_course_ids = (
-        select(Deadline.course_id)
-        .where(
-            Deadline.user_id == user.id,
-            Deadline.due_at.is_not(None),
-            Deadline.due_at >= cutoff,
-        )
+    # Visibility is user-controlled now via Course.status. Show all non-hidden
+    # courses, even ones without any dated deadlines. That way a newly-synced
+    # "taking" course with empty deadlines still appears in the sidebar so the
+    # user can chat with it, and archived ("taken") courses remain accessible.
+    all_courses_q = (
+        select(Course)
+        .where(Course.user_id == user.id, Course.status != "hidden")
     )
+    all_courses = (await db.execute(all_courses_q)).scalars().all()
 
+    # Deadlines: only pull recent/future dated items + null-due items, for
+    # non-hidden courses. Past-semester garbage stays filtered out.
     q = (
         select(Deadline, Course)
         .join(Course, Deadline.course_id == Course.id)
         .where(Deadline.user_id == user.id)
-        .where(Course.id.in_(active_course_ids))
-        # Within an active course, include recent dated items AND null-due items
-        # (so the "No due date" bucket still works for live courses).
+        .where(Course.status != "hidden")
         .where(or_(Deadline.due_at.is_(None), Deadline.due_at >= cutoff))
-        # Conservative belt-and-suspenders: if Canvas does set a clearly-past
-        # end_date, hide the course. EUR sets this to the whole year so it's
-        # usually a no-op here, but it catches odd cases.
-        .where(or_(Course.end_date.is_(None), Course.end_date >= course_end_cutoff))
         .order_by(Deadline.due_at.asc().nullslast())
     )
     rows = (await db.execute(q)).all()
@@ -85,24 +76,36 @@ async def get_deadlines(
     end_of_week = start_of_today + timedelta(days=7)
     end_of_two_weeks = start_of_today + timedelta(days=14)
 
-    by_course: dict[str, dict] = {}
+    def _entry_from_course(c: Course) -> dict:
+        return {
+            "course": {
+                "id": str(c.id),
+                "canvas_course_id": c.canvas_course_id,
+                "name": c.name,
+                "code": c.code,
+                "status": c.status,
+            },
+            "buckets": _empty_buckets(),
+            "earliest_due": None,
+            "pending_count": 0,
+        }
+
+    # Seed with all non-hidden courses so empty ones still appear.
+    by_course: dict[str, dict] = {str(c.id): _entry_from_course(c) for c in all_courses}
+
     for deadline, course in rows:
         cid = str(course.id)
         if cid not in by_course:
-            by_course[cid] = {
-                "course": {
-                    "id": cid,
-                    "canvas_course_id": course.canvas_course_id,
-                    "name": course.name,
-                    "code": course.code,
-                },
-                "buckets": _empty_buckets(),
-                "earliest_due": None,  # for sorting; stripped before responding
-                "pending_count": 0,
-            }
+            # Defensive: a deadline's course should already be seeded, but
+            # handle late-arriving data cleanly.
+            by_course[cid] = _entry_from_course(course)
         entry = by_course[cid]
 
         due_iso = _as_utc(deadline.due_at).isoformat() if deadline.due_at else None
+        # Effective "submitted" combines the Canvas-reported state with the
+        # user's manual override. Canvas sometimes lags on paper submissions
+        # or in-class quizzes, so the override lets the student tick it off.
+        effective_submitted = bool(deadline.submitted) or bool(deadline.manually_submitted)
         item = {
             "id": str(deadline.id),
             "title": deadline.title,
@@ -110,7 +113,8 @@ async def get_deadlines(
             "due_at": due_iso,
             "url": deadline.url,
             "points_possible": deadline.points_possible,
-            "submitted": deadline.submitted,
+            "submitted": effective_submitted,
+            "manually_submitted": deadline.manually_submitted,
         }
 
         if deadline.due_at is None:
@@ -131,7 +135,7 @@ async def get_deadlines(
         entry["buckets"][bucket].append(item)
 
         # Sort-by-urgency: earliest non-submitted deadline drives course order.
-        if not deadline.submitted:
+        if not effective_submitted:
             entry["pending_count"] += 1
             if deadline.due_at is not None:
                 due_utc = _as_utc(deadline.due_at)
@@ -154,4 +158,31 @@ async def get_deadlines(
         # True while a background sync is running for this user. The dashboard
         # polls while this is true so per-course commits show up live.
         "syncing": is_syncing(user.id),
+    }
+
+
+class DeadlineOverride(BaseModel):
+    manually_submitted: bool
+
+
+@router.patch("/deadlines/{deadline_id}")
+async def set_deadline_submission(
+    deadline_id: UUID,
+    payload: DeadlineOverride,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    deadline = (
+        await db.execute(
+            select(Deadline).where(Deadline.id == deadline_id, Deadline.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+    if deadline is None:
+        raise HTTPException(status_code=404, detail="deadline not found")
+    deadline.manually_submitted = payload.manually_submitted
+    await db.commit()
+    return {
+        "id": str(deadline.id),
+        "submitted": bool(deadline.submitted) or deadline.manually_submitted,
+        "manually_submitted": deadline.manually_submitted,
     }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
-import type { DeadlinesResponse } from "./types";
+import { listCourses, updateCourseStatus } from "./courses";
+import type { CourseStatus, DeadlinesResponse } from "./types";
 
 export function useDeadlines() {
   return useQuery({
@@ -61,5 +62,41 @@ export function useSync() {
 export function useLogout() {
   return useMutation({
     mutationFn: () => apiFetch<void>("/api/auth/session", { method: "DELETE" }),
+  });
+}
+
+export function useCourses() {
+  return useQuery({
+    queryKey: ["courses"],
+    queryFn: listCourses,
+    retry: false,
+  });
+}
+
+export function useUpdateCourseStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ canvasCourseId, status }: { canvasCourseId: number; status: CourseStatus }) =>
+      updateCourseStatus(canvasCourseId, status),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["deadlines"] });
+      qc.invalidateQueries({ queryKey: ["courses"] });
+    },
+  });
+}
+
+export function useSetDeadlineSubmission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ deadlineId, done }: { deadlineId: string; done: boolean }) =>
+      apiFetch<{ id: string; submitted: boolean; manually_submitted: boolean }>(
+        `/api/deadlines/${deadlineId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ manually_submitted: done }),
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["deadlines"] }),
   });
 }

@@ -1,16 +1,24 @@
-"""Materials endpoints: list / upload / url / delete / refresh."""
+"""Materials endpoints: list / upload / url / delete / refresh / download."""
 from __future__ import annotations
+import io
+import logging
+import re
+import zipfile
 from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import unquote, urlparse
 from uuid import UUID
 
+import httpx
 from fastapi import (
     APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status,
 )
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from studybuddy.auth.deps import current_user
 from studybuddy.chat.deps import get_embedder, resolve_course
@@ -191,6 +199,79 @@ async def delete_material(
     await db.execute(delete(Chunk).where(Chunk.file_id == row.id))
     await db.delete(row)
     await db.commit()
+
+
+_SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._\- ()]+")
+
+
+def _safe_filename(name: str) -> str:
+    """Strip characters that can confuse zip clients or file systems."""
+    cleaned = _SAFE_FILENAME_RE.sub("_", name).strip() or "file"
+    return cleaned[:200]
+
+
+@router.get("/download")
+async def download_all_materials(
+    canvas_course_id: int,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream a zip of every downloadable Canvas file for this course.
+
+    Uploads (user-added via our UI) aren't bundled — we don't persist their
+    bytes once they're indexed. Canvas pages are also skipped (no file body).
+    Buffers in memory; fine for ~hundreds of MB on the current plan.
+    """
+    if user.pat_encrypted is None or user.pat_nonce is None:
+        raise HTTPException(status_code=400, detail="connect your Canvas PAT first")
+    settings = get_settings()
+    course = await resolve_course(db, user=user, canvas_course_id=canvas_course_id)
+    files = (
+        await db.execute(
+            select(FileModel)
+            .where(
+                FileModel.course_id == course.id,
+                FileModel.deleted_at.is_(None),
+                FileModel.source == "canvas",
+                FileModel.url != "",
+            )
+            .order_by(FileModel.filename.asc())
+        )
+    ).scalars().all()
+    if not files:
+        raise HTTPException(status_code=404, detail="no Canvas files to download")
+
+    pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
+
+    buf = io.BytesIO()
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            seen: dict[str, int] = {}
+            for f in files:
+                try:
+                    resp = await client.get(
+                        f.url, headers={"Authorization": f"Bearer {pat}"}
+                    )
+                    resp.raise_for_status()
+                except Exception:
+                    logger.warning("download_all: fetch failed for %s", f.filename)
+                    continue
+                name = _safe_filename(f.filename)
+                # De-dupe if multiple files have the same sanitised name.
+                count = seen.get(name, 0)
+                if count > 0:
+                    root, _, ext = name.rpartition(".")
+                    name = f"{root} ({count}).{ext}" if root else f"{name} ({count})"
+                seen[_safe_filename(f.filename)] = count + 1
+                zf.writestr(name, resp.content)
+
+    buf.seek(0)
+    zip_name = _safe_filename(f"{course.name} — materials") + ".zip"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
+    )
 
 
 @router.post("/refresh", response_model=MaterialsListResponse)

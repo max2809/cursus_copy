@@ -1,10 +1,21 @@
 export type DeadlineType = "assignment" | "quiz" | "exam" | "event" | "other";
 
+export type CourseStatus = "taking" | "taken" | "hidden";
+
 export interface DeadlineCourse {
   id: string;
   canvas_course_id: number;
   name: string;
   code: string | null;
+  status?: CourseStatus;
+}
+
+export interface CourseSummary {
+  id: string;
+  canvas_course_id: number;
+  name: string;
+  code: string | null;
+  status: CourseStatus;
 }
 
 export interface Deadline {
@@ -15,6 +26,7 @@ export interface Deadline {
   url: string;
   points_possible: number | null;
   submitted: boolean | null;
+  manually_submitted?: boolean;
 }
 
 export type BucketKey =
