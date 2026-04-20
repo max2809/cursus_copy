@@ -342,6 +342,13 @@ export function CoursePane({
               <div
                 key={m.id}
                 className="mat-row"
+                // Add a 7th column for the inline action button(s) so they
+                // sit on the same baseline as size / date / indexed dot
+                // instead of wrapping onto a second row.
+                style={{
+                  gridTemplateColumns:
+                    "42px minmax(0, 1fr) 90px 56px 64px 14px auto",
+                }}
                 onClick={() => onAskInChat?.(`Summarize ${m.filename}`)}
                 role="button"
                 tabIndex={0}
@@ -373,6 +380,7 @@ export function CoursePane({
                 >
                   ●
                 </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                 {m.source === "canvas" ? (
                   <button
                     className="iconbtn"
@@ -426,6 +434,7 @@ export function CoursePane({
                     <IconTrash />
                   </button>
                 ) : null}
+                </div>
               </div>
             );
           })
