@@ -49,7 +49,12 @@ export interface DeadlinesResponse {
   syncing?: boolean;
 }
 
-export type MaterialSource = "canvas" | "canvas_page" | "upload" | "url";
+export type MaterialSource =
+  | "canvas"
+  | "canvas_page"
+  | "canvas_syllabus"
+  | "upload"
+  | "url";
 
 export interface MaterialItem {
   id: string;

@@ -46,7 +46,7 @@ _UPLOAD_MIME_ALLOW = {
 class MaterialResponse(BaseModel):
     id: UUID
     filename: str
-    source: Literal["canvas", "canvas_page", "upload", "url"]
+    source: Literal["canvas", "canvas_page", "canvas_syllabus", "upload", "url"]
     source_url: str | None = None
     size_bytes: int | None = None
     content_type: str | None = None

@@ -77,6 +77,36 @@ async def download_canvas_page(
         return body_html, "text/html", title
 
 
+async def download_canvas_syllabus(
+    *,
+    canvas_base_url: str,
+    pat: str,
+    canvas_course_id: int,
+    max_bytes: int,
+) -> tuple[bytes, str, str]:
+    """Fetch a course's syllabus body. Returns (bytes, content_type, filename).
+
+    Canvas exposes the syllabus via the course detail endpoint when
+    include[]=syllabus_body is requested; the field is HTML. We re-fetch
+    at index time (rather than caching on the Course row) so edits to the
+    syllabus propagate on the next index pass.
+    """
+    headers = {"Authorization": f"Bearer {pat}"}
+    url = f"https://{canvas_base_url}/api/v1/courses/{canvas_course_id}?include[]=syllabus_body"
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as c:
+        r = await c.get(url, headers=headers)
+        r.raise_for_status()
+        payload = r.json()
+        body = (payload.get("syllabus_body") or "").strip()
+        if not body:
+            raise DownloadError(f"course {canvas_course_id} has no syllabus body")
+        body_html = body.encode("utf-8")
+        if len(body_html) > max_bytes:
+            raise DownloadTooLarge(f"canvas syllabus {canvas_course_id} is {len(body_html)} bytes (>{max_bytes})")
+        title = f"Syllabus — {payload.get('name') or 'course'}"
+        return body_html, "text/html", title
+
+
 async def fetch_url(url: str, *, max_bytes: int) -> tuple[bytes, str, str]:
     """Returns (bytes, content_type, filename) for a public URL."""
     parsed = urlparse(url)

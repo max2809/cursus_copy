@@ -18,7 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from studybuddy.db.models import Chunk, Course, Deadline, File as FileModel, User
 from studybuddy.rag import INDEX_VERSION
 from studybuddy.rag.chunker import chunk_markdown
-from studybuddy.rag.downloader import download_canvas_file, download_canvas_page, fetch_url
+from studybuddy.rag.downloader import (
+    download_canvas_file,
+    download_canvas_page,
+    download_canvas_syllabus,
+    fetch_url,
+)
 from studybuddy.rag.parser import ParsedDoc, parse_to_markdown
 
 
@@ -109,6 +114,16 @@ async def _download_for_file(
             pat=pat,
             canvas_course_id=course.canvas_course_id,
             page_slug=f.source_url,
+            max_bytes=max_bytes,
+        )
+    if f.source == "canvas_syllabus":
+        if not pat:
+            raise RuntimeError("canvas syllabus download requires pat")
+        course = (await db.execute(select(Course).where(Course.id == f.course_id))).scalar_one()
+        return await download_canvas_syllabus(
+            canvas_base_url=canvas_base_url,
+            pat=pat,
+            canvas_course_id=course.canvas_course_id,
             max_bytes=max_bytes,
         )
     if f.source == "url":

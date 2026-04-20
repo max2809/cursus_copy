@@ -22,8 +22,13 @@ async def test_sync_inserts_courses_deadlines_files(db, httpx_mock):
 
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term&include%5B%5D=syllabus_body",
         json=[{"id": 10, "name": "Algorithms", "course_code": "CS101", "enrollments": [{"enrollment_state": "active"}]}],
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/front_page",
+        status_code=404,
     )
     httpx_mock.add_response(
         method="GET",
@@ -74,8 +79,13 @@ async def test_sync_is_idempotent(db, httpx_mock):
     for _ in range(2):
         httpx_mock.add_response(
             method="GET",
-            url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
+            url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term&include%5B%5D=syllabus_body",
             json=[{"id": 10, "name": "Algorithms", "enrollments": [{"enrollment_state": "active"}]}],
+        )
+        httpx_mock.add_response(
+            method="GET",
+            url="https://canvas.eur.nl/api/v1/courses/10/front_page",
+            status_code=404,
         )
         httpx_mock.add_response(
             method="GET",
@@ -108,7 +118,7 @@ async def test_sync_401_clears_pat(db, httpx_mock):
     user = await _user_with_pat(db)
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term&include%5B%5D=syllabus_body",
         status_code=401,
     )
     with pytest.raises(Exception):

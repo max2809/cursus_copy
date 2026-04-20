@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from hashlib import sha256
 from uuid import UUID
 import httpx
@@ -49,7 +49,9 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
             "/api/v1/courses",
             params={
                 "enrollment_state[]": ["active", "completed", "invited_or_pending"],
-                "include[]": "term",
+                # syllabus_body lets us light up a Syllabus material per course —
+                # usually contains the exam schedule + course structure.
+                "include[]": ["term", "syllabus_body"],
             },
         )
     except CanvasUnauthorized:
@@ -58,8 +60,13 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
         await db.flush()
         raise
 
+    # Keep the raw course payloads keyed by canvas_course_id so we can
+    # peek at syllabus_body when upserting syllabus material rows below.
+    payloads_by_id: dict[int, dict] = {}
     for c in courses_payload:
         await _upsert_course(db, user.id, c)
+        if isinstance(c.get("id"), int):
+            payloads_by_id[c["id"]] = c
 
     # Commit the course list so the dashboard poller can show "0 of N courses"
     # even before any course's details are fetched.
@@ -72,6 +79,43 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
         # refetch. User can flip back to "taking" to re-enable sync.
         if course.status != "taking":
             continue
+
+        # Syllabus: if the course's syllabus_body is non-empty, light up a
+        # "canvas_syllabus" FileModel row so the indexer picks it up. Exam
+        # dates + grading breakdowns usually live here.
+        raw_payload = payloads_by_id.get(course.canvas_course_id) or {}
+        syllabus_html = (raw_payload.get("syllabus_body") or "").strip()
+        if syllabus_html:
+            await _upsert_syllabus(
+                db,
+                user_id=user.id,
+                course_id=course.id,
+                canvas_course_id=course.canvas_course_id,
+                canvas_base_url=user.canvas_base_url,
+                course_name=course.name,
+            )
+
+        # Front page: the wiki page Canvas shows as the course home, when
+        # the home is set to a Page. 404 when it's something else (activity
+        # stream / modules); _safe_get swallows it.
+        front = await _safe_get(
+            client, f"/api/v1/courses/{course.canvas_course_id}/front_page"
+        )
+        # /front_page returns an object, not a list; our get_paginated
+        # wraps single objects in a 1-element list.
+        for page in front:
+            page_slug = page.get("url") or page.get("page_url")
+            if not page_slug:
+                continue
+            await _upsert_page(
+                db,
+                user.id,
+                course.id,
+                page_slug=page_slug,
+                title=page.get("title") or "Course home",
+                html_url=page.get("html_url") or "",
+            )
+
         assignments = await _safe_get(
             client,
             f"/api/v1/courses/{course.canvas_course_id}/assignments",
@@ -226,18 +270,31 @@ async def _upsert_course(db: AsyncSession, user_id, payload: dict) -> None:
         select(Course).where(Course.user_id == user_id, Course.canvas_course_id == payload["id"])
     )).scalar_one_or_none()
     start_date, end_date = _course_dates(payload)
-    # Default "taking" only if the user has an active enrollment on this course.
-    # Canvas returns an `enrollments` array with per-enrollment state; past
-    # semesters come back as "completed" (or rarely "invited"/"deleted").
-    # Course-level workflow_state isn't a reliable signal — EUR keeps whole
-    # courses "available" for years — so we look at the enrollment instead.
+    # Default status picks the "likely currently-taking" set automatically:
+    #   - course has an active enrollment AND
+    #   - the course/term end_date isn't clearly in the past
+    # EUR keeps Canvas enrollments marked "active" across years, so we can't
+    # rely on enrollment_state alone. We cross-check with the term end_date:
+    # anything that ended more than 30 days ago defaults to "hidden" even if
+    # Canvas still says the enrollment is active. The 30-day window lets
+    # resits / late-graded items still surface at the end of a semester.
+    # User can always promote a hidden course via the All-courses page.
     enrollments = payload.get("enrollments") or []
     has_active_enrollment = any(
         (e.get("enrollment_state") or "").lower() == "active"
         for e in enrollments
         if isinstance(e, dict)
     )
-    default_status = "taking" if has_active_enrollment else "hidden"
+    today = date.today()
+    ended_long_ago = end_date is not None and end_date < (today - timedelta(days=30))
+    started_long_ago = (
+        start_date is not None and start_date < (today - timedelta(days=365))
+    )
+    default_status = (
+        "taking"
+        if has_active_enrollment and not ended_long_ago and not started_long_ago
+        else "hidden"
+    )
     if existing is None:
         db.add(Course(
             user_id=user_id,
@@ -387,4 +444,54 @@ async def _upsert_page(
     else:
         existing.filename = title or existing.filename
         existing.url = html_url or existing.url
+        existing.synced_at = now
+
+
+async def _upsert_syllabus(
+    db: AsyncSession,
+    *,
+    user_id,
+    course_id,
+    canvas_course_id: int,
+    canvas_base_url: str,
+    course_name: str,
+) -> None:
+    """Upsert the course syllabus as a FileModel with source='canvas_syllabus'.
+
+    We don't cache the syllabus HTML here — the indexer re-fetches it from
+    /api/v1/courses/{id}?include[]=syllabus_body at index time so edits
+    propagate. Identity is (user_id, course_id, source='canvas_syllabus');
+    there's one syllabus per course.
+    """
+    existing = (await db.execute(
+        select(FileModel).where(
+            FileModel.user_id == user_id,
+            FileModel.course_id == course_id,
+            FileModel.source == "canvas_syllabus",
+        )
+    )).scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+    title = f"Syllabus — {course_name}"
+    html_url = f"https://{canvas_base_url}/courses/{canvas_course_id}/assignments/syllabus"
+    if existing is None:
+        db.add(FileModel(
+            user_id=user_id,
+            course_id=course_id,
+            canvas_file_id=None,
+            filename=title,
+            content_type="text/html",
+            url=html_url,
+            source="canvas_syllabus",
+            source_url=f"syllabus:{canvas_course_id}",
+            uploaded_at=now,
+            # Bump updated_at so the indexer re-runs when the user hits
+            # Refresh, even if we don't know whether the body actually
+            # changed without fetching it again.
+            updated_at=now,
+            synced_at=now,
+        ))
+    else:
+        existing.filename = title
+        existing.url = html_url
+        existing.updated_at = now
         existing.synced_at = now

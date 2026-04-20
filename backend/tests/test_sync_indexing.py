@@ -23,7 +23,7 @@ async def test_sync_returns_pending_indexing_for_new_files(db, httpx_mock):
     user = await _user(db)
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term&include%5B%5D=syllabus_body",
         json=[{"id": 10, "name": "CS", "course_code": "CS101", "enrollments": [{"enrollment_state": "active"}]}],
     )
     httpx_mock.add_response(
@@ -31,6 +31,11 @@ async def test_sync_returns_pending_indexing_for_new_files(db, httpx_mock):
         url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission",
         json=[{"id": "a1", "name": "PS1", "description": "<p>Old</p>",
                "due_at": None, "html_url": "https://x"}],
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/front_page",
+        status_code=404,
     )
     httpx_mock.add_response(method="GET", url="https://canvas.eur.nl/api/v1/courses/10/quizzes", json=[])
     httpx_mock.add_response(
@@ -63,12 +68,17 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
     user = await _user(db)
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term&include%5B%5D=syllabus_body",
         json=[{"id": 10, "name": "CS", "enrollments": [{"enrollment_state": "active"}]}],
     )
     httpx_mock.add_response(
         method="GET",
         url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission", json=[],
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/front_page",
+        status_code=404,
     )
     httpx_mock.add_response(method="GET", url="https://canvas.eur.nl/api/v1/courses/10/quizzes", json=[])
     httpx_mock.add_response(
@@ -100,12 +110,17 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
     # Second sync: mock everything again (pytest-httpx consumes responses).
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term&include%5B%5D=syllabus_body",
         json=[{"id": 10, "name": "CS", "enrollments": [{"enrollment_state": "active"}]}],
     )
     httpx_mock.add_response(
         method="GET",
         url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission", json=[],
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/front_page",
+        status_code=404,
     )
     httpx_mock.add_response(method="GET", url="https://canvas.eur.nl/api/v1/courses/10/quizzes", json=[])
     httpx_mock.add_response(
@@ -135,7 +150,7 @@ async def test_sync_reindexes_on_description_hash_drift(db, httpx_mock):
     for body in ("orig", "updated"):
         httpx_mock.add_response(
             method="GET",
-            url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term",
+            url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term&include%5B%5D=syllabus_body",
             json=[{"id": 10, "name": "CS", "enrollments": [{"enrollment_state": "active"}]}],
         )
         httpx_mock.add_response(
@@ -143,6 +158,11 @@ async def test_sync_reindexes_on_description_hash_drift(db, httpx_mock):
             url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission",
             json=[{"id": "a1", "name": "PS1", "description": f"<p>{body}</p>",
                    "due_at": None, "html_url": "https://x"}],
+        )
+        httpx_mock.add_response(
+            method="GET",
+            url="https://canvas.eur.nl/api/v1/courses/10/front_page",
+            status_code=404,
         )
         httpx_mock.add_response(method="GET", url="https://canvas.eur.nl/api/v1/courses/10/quizzes", json=[])
         httpx_mock.add_response(
