@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CourseStatus, CourseSummary } from "../api/types";
 import { useCourses, useUpdateCourseStatus } from "../api/queries";
 import { courseColor } from "../components/shell/Sidebar";
@@ -42,29 +42,40 @@ export function CoursesView() {
   const { data, isLoading, error } = useCourses();
   const updateStatus = useUpdateCourseStatus();
   const [query, setQuery] = useState("");
-  // course.id → target status while the row is animating out of its current section
+  // course.id → status it's leaving FROM. Only the row rendered under that
+  // section gets the animation; once the refetch lands and the course moves
+  // to its new section, the entry is stale and ignored by the render.
   const [leaving, setLeaving] = useState<Map<string, CourseStatus>>(new Map());
 
   function requestChange(c: CourseSummary, next: CourseStatus) {
     if (c.status === next) return;
-    setLeaving((prev) => new Map(prev).set(c.id, next));
+    const from = c.status;
+    setLeaving((prev) => new Map(prev).set(c.id, from));
     window.setTimeout(() => {
-      updateStatus.mutate(
-        { canvasCourseId: c.canvas_course_id, status: next },
-        {
-          onSettled: () => {
-            // Clear the leaving mark once the fresh query result lands so the
-            // row appears in its new section (no stale animation state left).
-            setLeaving((prev) => {
-              const n = new Map(prev);
-              n.delete(c.id);
-              return n;
-            });
-          },
-        },
-      );
+      updateStatus.mutate({ canvasCourseId: c.canvas_course_id, status: next });
     }, EXIT_MS);
   }
+
+  // Sweep stale leaving marks after the refetch lands. A row is "stale" once
+  // its current status in the data no longer matches the from-status it was
+  // leaving — i.e. the course has moved to its new section and there is
+  // nothing left to animate. Happens a tick after data changes so the
+  // "match" render has already committed.
+  useEffect(() => {
+    if (!data || leaving.size === 0) return;
+    setLeaving((prev) => {
+      let changed = false;
+      const next = new Map(prev);
+      for (const [id, from] of prev) {
+        const c = data.find((x) => x.id === id);
+        if (!c || c.status !== from) {
+          next.delete(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [data, leaving]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

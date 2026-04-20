@@ -62,12 +62,32 @@ export function Sidebar({
   ];
   const initials = initialsFrom(userEmail);
 
-  // Map from course.id → status so we can visually differentiate taken rows.
+  // Map from course.id → status so we can split taking vs taken cleanly.
   const statusById = useMemo(() => {
     const m = new Map<number, CourseStatus>();
     (allCourses ?? []).forEach((c) => m.set(c.canvas_course_id, c.status));
     return m;
   }, [allCourses]);
+
+  // Split into taking / taken buckets. Each bucket is alphabetised so
+  // within-bucket order doesn't mix taking + taken (fixes "taken course
+  // shows up above a currently-taking course").
+  const { takingCourses, takenCourses } = useMemo(() => {
+    const taking: CourseDeadlines[] = [];
+    const taken: CourseDeadlines[] = [];
+    for (const c of courses) {
+      const s = statusById.get(c.course.canvas_course_id) ?? "taking";
+      if (s === "taken") taken.push(c);
+      else taking.push(c);
+    }
+    const byName = (a: CourseDeadlines, b: CourseDeadlines) =>
+      a.course.name.localeCompare(b.course.name);
+    taking.sort(byName);
+    taken.sort(byName);
+    return { takingCourses: taking, takenCourses: taken };
+  }, [courses, statusById]);
+
+  const [showTaken, setShowTaken] = useState(false);
 
   return (
     <aside className="sidebar">
@@ -125,28 +145,79 @@ export function Sidebar({
           </button>
         </div>
         <div className="courses-list">
-          {courses.map((c, i) => {
-            const status = statusById.get(c.course.canvas_course_id) ?? "taking";
-            return (
-              <CourseChip
-                key={c.course.id}
-                color={courseColor(c.course.id, i)}
-                name={c.course.name}
-                code={c.course.code}
-                canvasCourseId={c.course.canvas_course_id}
-                status={status}
-                active={activeCourseId === c.course.id}
-                onSelect={() => onCourseSelect(c.course.id)}
-                onStatusChange={onCourseStatusChange}
-              />
-            );
-          })}
-          {courses.length === 0 && (
+          {takingCourses.map((c, i) => (
+            <CourseChip
+              key={c.course.id}
+              color={courseColor(c.course.id, i)}
+              name={c.course.name}
+              code={c.course.code}
+              canvasCourseId={c.course.canvas_course_id}
+              status="taking"
+              active={activeCourseId === c.course.id}
+              onSelect={() => onCourseSelect(c.course.id)}
+              onStatusChange={onCourseStatusChange}
+            />
+          ))}
+          {takingCourses.length === 0 && (
             <div style={{ fontSize: 12, color: "var(--ink-3)", padding: "6px 8px" }}>
               No active courses — open Manage to add one.
             </div>
           )}
         </div>
+
+        {takenCourses.length > 0 && (
+          <div style={{ marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={() => setShowTaken((v) => !v)}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                background: "transparent",
+                border: "none",
+                color: "var(--ink-3)",
+                padding: "6px 8px",
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+                borderRadius: "var(--r-sm)",
+              }}
+            >
+              <span>Taken ({takenCourses.length})</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  transform: showTaken ? "rotate(90deg)" : "rotate(0deg)",
+                  transition: "transform var(--fast)",
+                  display: "inline-block",
+                }}
+              >
+                ▸
+              </span>
+            </button>
+            {showTaken && (
+              <div className="courses-list" style={{ marginTop: 2 }}>
+                {takenCourses.map((c, i) => (
+                  <CourseChip
+                    key={c.course.id}
+                    color={courseColor(c.course.id, i + takingCourses.length)}
+                    name={c.course.name}
+                    code={c.course.code}
+                    canvasCourseId={c.course.canvas_course_id}
+                    status="taken"
+                    active={activeCourseId === c.course.id}
+                    onSelect={() => onCourseSelect(c.course.id)}
+                    onStatusChange={onCourseStatusChange}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="side-foot">
