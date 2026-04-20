@@ -9,6 +9,7 @@ import { Sidebar, type NavKey } from "../components/shell/Sidebar";
 import { IconMax, IconRefresh, IconSearch } from "../design/icons";
 import { PlanView } from "./PlanView";
 import { LibraryView } from "./LibraryView";
+import { CoursesView } from "./CoursesView";
 
 function getUserEmail(): string | undefined {
   try {
@@ -145,7 +146,9 @@ export default function Dashboard() {
               ? "Ask Cursus"
               : navParam === "plan"
                 ? "Study plan"
-                : "Library"}
+                : navParam === "courses"
+                  ? "All courses"
+                  : "Library"}
         </span>
       </div>
       <div className="spacer" />
@@ -181,6 +184,7 @@ export default function Dashboard() {
   const content = (() => {
     if (navParam === "plan") return <PlanView courses={courses} />;
     if (navParam === "library") return <LibraryView courses={courses} />;
+    if (navParam === "courses") return <CoursesView />;
 
     if (navParam === "chat") {
       if (!activeCourse) return <NoCourse />;

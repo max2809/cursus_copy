@@ -9,7 +9,7 @@ import {
   IconPlan,
 } from "../../design/icons";
 
-export type NavKey = "home" | "chat" | "plan" | "library";
+export type NavKey = "home" | "chat" | "plan" | "library" | "courses";
 
 interface Props {
   activeNav: NavKey;
@@ -62,13 +62,7 @@ export function Sidebar({
   ];
   const initials = initialsFrom(userEmail);
 
-  const hidden = useMemo(
-    () => (allCourses ?? []).filter((c) => c.status === "hidden"),
-    [allCourses],
-  );
-  const [showHidden, setShowHidden] = useState(false);
-
-  // Map from course.id → status for visible list (taking vs taken visual)
+  // Map from course.id → status so we can visually differentiate taken rows.
   const statusById = useMemo(() => {
     const m = new Map<number, CourseStatus>();
     (allCourses ?? []).forEach((c) => m.set(c.canvas_course_id, c.status));
@@ -97,7 +91,39 @@ export function Sidebar({
       </div>
 
       <div>
-        <div className="nav-section-label">Courses</div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 8px 4px",
+          }}
+        >
+          <span
+            className="nav-section-label"
+            style={{ padding: 0, margin: 0 }}
+          >
+            Courses
+          </span>
+          <button
+            type="button"
+            onClick={() => onNav("courses")}
+            title="Manage all courses"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: activeNav === "courses" ? "var(--accent)" : "var(--ink-3)",
+              fontSize: 11,
+              fontWeight: 500,
+              letterSpacing: "0.02em",
+              cursor: "pointer",
+              padding: "2px 6px",
+              borderRadius: "var(--r-sm)",
+            }}
+          >
+            Manage
+          </button>
+        </div>
         <div className="courses-list">
           {courses.map((c, i) => {
             const status = statusById.get(c.course.canvas_course_id) ?? "taking";
@@ -117,54 +143,10 @@ export function Sidebar({
           })}
           {courses.length === 0 && (
             <div style={{ fontSize: 12, color: "var(--ink-3)", padding: "6px 8px" }}>
-              No active courses
+              No active courses — open Manage to add one.
             </div>
           )}
         </div>
-
-        {hidden.length > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <button
-              type="button"
-              onClick={() => setShowHidden((v) => !v)}
-              style={{
-                width: "100%",
-                background: "transparent",
-                border: "none",
-                color: "var(--ink-3)",
-                padding: "6px 8px",
-                fontSize: 11,
-                fontWeight: 600,
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-                textAlign: "left",
-                cursor: "pointer",
-              }}
-            >
-              Hidden ({hidden.length}) {showHidden ? "▾" : "▸"}
-            </button>
-            {showHidden && (
-              <div className="courses-list" style={{ opacity: 0.7 }}>
-                {hidden.map((c, i) => (
-                  <CourseChip
-                    key={c.id}
-                    color={courseColor(c.id, i)}
-                    name={c.name}
-                    code={c.code}
-                    canvasCourseId={c.canvas_course_id}
-                    status="hidden"
-                    active={false}
-                    onSelect={() => {
-                      // Hidden courses are click-to-nothing until unhidden.
-                      onCourseStatusChange?.(c.canvas_course_id, "taking");
-                    }}
-                    onStatusChange={onCourseStatusChange}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       <div className="side-foot">
@@ -225,8 +207,6 @@ function CourseChip({
     };
   }, [menuOpen]);
 
-  const statusClass = status === "taken" ? "course-chip-taken" : "";
-
   const change = (next: CourseStatus) => {
     setMenuOpen(false);
     onStatusChange?.(canvasCourseId, next);
@@ -235,40 +215,81 @@ function CourseChip({
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
       <button
-        className={`course-chip ${statusClass}`}
+        className="course-chip"
         data-active={active}
         onClick={onSelect}
         type="button"
-        style={{ width: "100%" }}
+        style={{
+          width: "100%",
+          alignItems: "flex-start",
+          padding: "8px 10px",
+        }}
       >
-        <span className="dot" style={{ background: color }} />
+        <span
+          className="dot"
+          style={{ background: color, marginTop: 5, flexShrink: 0 }}
+        />
         <span
           style={{
             flex: 1,
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
             textAlign: "left",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
             opacity: status === "taken" ? 0.7 : 1,
           }}
         >
-          {name}
-          {status === "taken" && (
-            <span
-              style={{
-                marginLeft: 6,
-                fontSize: 9,
-                fontWeight: 500,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                color: "var(--ink-3)",
-              }}
-            >
-              taken
-            </span>
-          )}
+          <span
+            style={{
+              fontSize: 13.5,
+              fontWeight: 500,
+              color: active ? "var(--ink)" : "var(--ink-2)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              display: "block",
+            }}
+          >
+            {name}
+          </span>
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 10.5,
+              color: "var(--ink-3)",
+              fontFamily: "var(--font-mono)",
+              letterSpacing: "0.02em",
+            }}
+          >
+            {code && (
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {code}
+              </span>
+            )}
+            {status === "taken" && (
+              <span
+                style={{
+                  fontSize: 9,
+                  fontWeight: 600,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "var(--ink-3)",
+                }}
+              >
+                · taken
+              </span>
+            )}
+          </span>
         </span>
-        {code && <span className="code">{code}</span>}
         {onStatusChange && (
           <span
             role="button"
@@ -295,6 +316,7 @@ function CourseChip({
               borderRadius: 6,
               color: "var(--ink-3)",
               cursor: "pointer",
+              flexShrink: 0,
             }}
           >
             <IconEllipsis width={12} height={12} />
@@ -309,7 +331,7 @@ function CourseChip({
             right: 4,
             top: "100%",
             marginTop: 2,
-            minWidth: 180,
+            minWidth: 200,
             background: "var(--bg-elev)",
             border: "1px solid var(--hair)",
             borderRadius: "var(--r-md)",
