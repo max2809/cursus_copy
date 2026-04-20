@@ -33,6 +33,35 @@ interface Row {
   bucket: BucketKey;
 }
 
+function courseBadge(name: string): string {
+  // Three-letter uppercase abbreviation built from the course name so the
+  // coloured square is actually identifiable at a glance. Prefers first
+  // letter of each significant word; falls back to the first three
+  // characters if there aren't enough words.
+  const stop = new Set(["of", "the", "and", "&", "in", "on", "to", "for", "a", "an"]);
+  const words = (name || "")
+    .split(/[\s:\-,\/]+/)
+    .map((w) => w.trim())
+    .filter((w) => w && !stop.has(w.toLowerCase()));
+  if (words.length >= 3) {
+    return words
+      .slice(0, 3)
+      .map((w) => w[0].toUpperCase())
+      .join("");
+  }
+  return (name || "")
+    .replace(/[^A-Za-z]/g, "")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+function shortCode(code: string | null): string {
+  if (!code) return "";
+  // Drop the common "EUC-" / "EUR-" institutional prefix so the code
+  // itself doesn't wrap onto two lines in the sidebar-date column.
+  return code.replace(/^[A-Z]{2,4}-\s*/, "");
+}
+
 function aggregate(courses: CourseDeadlines[]): Map<BucketKey, Row[]> {
   const out = new Map<BucketKey, Row[]>();
   for (const k of BUCKET_ORDER) out.set(k, []);
@@ -116,7 +145,7 @@ export function PlanView({ courses }: Props) {
                     key={row.deadline.id}
                     className="upcoming-item"
                     style={{
-                      gridTemplateColumns: "auto 64px 1fr auto auto",
+                      gridTemplateColumns: "auto 84px 1fr auto auto",
                       textDecoration: "none",
                       color: "inherit",
                       opacity: done ? 0.55 : 1,
@@ -128,24 +157,45 @@ export function PlanView({ courses }: Props) {
                         setSubmission.mutate({ deadlineId: row.deadline.id, done: !done })
                       }
                     />
-                    <div className="upcoming-date">
+                    <div
+                      className="upcoming-date"
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
                       <div
-                        className="d"
                         style={{
                           background: color,
                           color: "var(--accent-ink)",
-                          borderRadius: 6,
-                          width: 28,
-                          height: 28,
+                          borderRadius: 8,
+                          width: 40,
+                          height: 36,
                           display: "grid",
                           placeItems: "center",
-                          fontSize: 14,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          fontFamily: "var(--font-sans)",
+                          fontStyle: "normal",
+                          letterSpacing: "0.04em",
                         }}
                       >
-                        {row.course.name.charAt(0)}
+                        {courseBadge(row.course.name)}
                       </div>
-                      <div className="m" style={{ fontSize: 9 }}>
-                        {row.course.code ?? row.course.name.slice(0, 8)}
+                      <div
+                        style={{
+                          fontSize: 9.5,
+                          color: "var(--ink-3)",
+                          fontFamily: "var(--font-mono)",
+                          letterSpacing: "0.02em",
+                          whiteSpace: "nowrap",
+                          textTransform: "none",
+                          marginTop: 0,
+                        }}
+                      >
+                        {shortCode(row.course.code) || courseBadge(row.course.name)}
                       </div>
                     </div>
                     <a
