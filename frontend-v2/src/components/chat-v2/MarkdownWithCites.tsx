@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 interface Props {
   content: string;
@@ -54,7 +57,8 @@ function mapChildren(children: ReactNode, onClick: (n: number) => void): ReactNo
 export function MarkdownWithCites({ content, onCiteClick }: Props) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeKatex]}
       components={{
         p({ children, ...props }) {
           return <p {...props}>{mapChildren(children, onCiteClick)}</p>;
