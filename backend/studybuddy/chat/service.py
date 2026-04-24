@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from studybuddy.chat.prompts import build_context_block, build_messages, build_system_prompt
 from studybuddy.chat.query_rewriter import rewrite_query
-from studybuddy.db.models import ChatMessage, ChatSession, Chunk, User
+from studybuddy.db.models import ChatMessage, ChatSession, Chunk, Deadline, File, User
 from studybuddy.rag.retrieval import retrieve_chunks
 
 
@@ -96,7 +96,8 @@ async def answer_and_stream(
         top_k_rerank=top_k_rerank,
         reranker=reranker,
     )
-    context_block = build_context_block(top_chunks)
+    source_labels = await _load_source_labels(db, top_chunks)
+    context_block = build_context_block(top_chunks, source_labels)
     messages = build_messages(
         history=[{"role": m.role, "content": m.content} for m in history],
         user_query=user_text,
@@ -157,6 +158,35 @@ async def answer_and_stream(
             message_id=assistant_msg.id,
             citations=citations,
         )
+
+
+async def _load_source_labels(db: AsyncSession, chunks: list[Chunk]) -> dict:
+    """Map chunk.id -> human-readable source label (filename or deadline title).
+
+    Kept to two SELECTs regardless of chunk count; missing rows are silently
+    skipped so chunks without an attached source still render with a numeric
+    header.
+    """
+    labels: dict = {}
+    file_ids = {c.file_id for c in chunks if c.file_id is not None}
+    deadline_ids = {c.deadline_id for c in chunks if c.deadline_id is not None}
+    if file_ids:
+        rows = (await db.execute(
+            select(File.id, File.filename).where(File.id.in_(file_ids))
+        )).all()
+        file_names = {fid: name for fid, name in rows}
+        for c in chunks:
+            if c.file_id in file_names and c.id is not None:
+                labels[c.id] = file_names[c.file_id]
+    if deadline_ids:
+        rows = (await db.execute(
+            select(Deadline.id, Deadline.title).where(Deadline.id.in_(deadline_ids))
+        )).all()
+        deadline_titles = {did: title for did, title in rows}
+        for c in chunks:
+            if c.deadline_id in deadline_titles and c.id is not None:
+                labels[c.id] = deadline_titles[c.deadline_id]
+    return labels
 
 
 async def _load_history(db: AsyncSession, *, session_id) -> list[ChatMessage]:

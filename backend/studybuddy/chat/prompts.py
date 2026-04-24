@@ -1,12 +1,15 @@
 """Prompt assembly for per-course RAG chat.
 
 Context blocks are numbered [1]..[N] matching the reranked top-K chunks.
-The assistant is instructed to emit citations in the same [N] form, and
-we parse them post-hoc into structured citation rows.
+Each block header includes the source filename/title so Claude can reason
+about *which* source it's drawing from. The assistant is instructed to
+emit citations in the same [N] form, and we parse them post-hoc into
+structured citation rows.
 """
 from __future__ import annotations
 from datetime import date
-from typing import Iterable
+from typing import Iterable, Mapping
+from uuid import UUID
 from studybuddy.db.models import Chunk
 
 
@@ -20,7 +23,13 @@ _SYSTEM_TEMPLATE = (
     "does not contain the answer, say so plainly — do not invent facts or draw "
     "on outside knowledge.\n"
     "- Cite inline using [1], [2], ... matching the numbered context blocks. "
-    "Place citations immediately after the claim they support.\n"
+    "A citation [N] must point to a block whose text literally supports the "
+    "claim you just made. Do not cite a block merely because it's on the same "
+    "topic. If no block directly supports a claim, either state it without a "
+    "citation or omit the claim.\n"
+    "- Place citations immediately after the claim they support.\n"
+    "- Use $...$ for inline math and $$...$$ for display math. Plain text for "
+    "everything else — no raw LaTeX commands outside math delimiters.\n"
     "- Keep answers concise and structured (short paragraphs, bullet lists "
     "when useful).\n"
     "- Respond in the same language as the user's question when possible; "
@@ -53,18 +62,31 @@ def build_system_prompt(
     )
 
 
-def build_context_block(chunks: Iterable[Chunk]) -> str:
+def build_context_block(
+    chunks: Iterable[Chunk],
+    source_labels: Mapping[UUID, str] | None = None,
+) -> str:
+    """Render numbered context blocks.
+
+    source_labels maps chunk.id -> a human-readable source name (filename for
+    files, title for deadlines/pages). If provided, the source name is shown
+    first in each block header so Claude can tell which source it's quoting.
+    """
     chunks = list(chunks)
     if not chunks:
         return ""
+    labels = source_labels or {}
     parts: list[str] = []
     for i, c in enumerate(chunks, start=1):
         header_bits: list[str] = []
+        label = labels.get(c.id) if c.id is not None else None
+        if label:
+            header_bits.append(label)
         if c.heading_path:
             header_bits.append(c.heading_path)
         if c.page_hint is not None:
             header_bits.append(f"p.{c.page_hint}")
-        header = ", ".join(header_bits) if header_bits else "source"
+        header = " — ".join(header_bits) if header_bits else "source"
         parts.append(f"[{i}] {header}:\n{c.content_text.strip()}")
     return "\n\n".join(parts)
 

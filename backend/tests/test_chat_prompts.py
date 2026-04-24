@@ -40,6 +40,35 @@ def test_context_block_numbered_with_metadata():
     assert "Elasticity" in block
 
 
+def test_context_block_uses_source_labels():
+    import uuid
+    id1 = uuid.uuid4()
+    id2 = uuid.uuid4()
+    c1 = _chunk(content_text="Supply and demand basics.",
+                heading_path="Ch.1 > Basics", page_hint=3)
+    c2 = _chunk(content_text="Elasticity is the responsiveness...",
+                heading_path=None, page_hint=None)
+    c1.id = id1
+    c2.id = id2
+    labels = {id1: "Week 3 — Econ.pdf", id2: "Assignment 1"}
+    block = build_context_block([c1, c2], labels)
+    assert "Week 3 — Econ.pdf" in block
+    assert "Assignment 1" in block
+    # Filename appears before heading/page in the header.
+    assert block.index("Week 3 — Econ.pdf") < block.index("Ch.1 > Basics")
+
+
+def test_system_prompt_forbids_unsupported_citations():
+    p = build_system_prompt(course_name="X", canvas_base_url="canvas")
+    # The stricter rule wording should appear.
+    assert "literally supports" in p or "literally support" in p
+
+
+def test_system_prompt_mentions_math_delimiters():
+    p = build_system_prompt(course_name="X", canvas_base_url="canvas")
+    assert "$...$" in p and "$$...$$" in p
+
+
 def test_context_block_empty_when_no_chunks():
     assert build_context_block([]) == ""
 
