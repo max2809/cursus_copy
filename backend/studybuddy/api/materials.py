@@ -1,8 +1,8 @@
 """Materials endpoints: list / upload / url / delete / refresh / download."""
 from __future__ import annotations
-import io
 import logging
 import re
+import tempfile
 import zipfile
 from datetime import datetime, timezone
 from typing import Literal
@@ -221,7 +221,11 @@ async def download_all_materials(
 
     Uploads (user-added via our UI) aren't bundled — we don't persist their
     bytes once they're indexed. Canvas pages are also skipped (no file body).
-    Buffers in memory; fine for ~hundreds of MB on the current plan.
+
+    The zip buffer is a SpooledTemporaryFile: it stays in RAM while it's
+    small, and spills to disk above the threshold. That keeps worst-case
+    memory bounded on Railway even when a course has hundreds of MB of
+    materials.
     """
     if user.pat_encrypted is None or user.pat_nonce is None:
         raise HTTPException(status_code=400, detail="connect your Canvas PAT first")
@@ -244,32 +248,50 @@ async def download_all_materials(
 
     pat = decrypt_pat(user.pat_encrypted, user.pat_nonce, settings.master_key_bytes())
 
-    buf = io.BytesIO()
-    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            seen: dict[str, int] = {}
-            for f in files:
-                try:
-                    resp = await client.get(
-                        f.url, headers={"Authorization": f"Bearer {pat}"}
-                    )
-                    resp.raise_for_status()
-                except Exception:
-                    logger.warning("download_all: fetch failed for %s", f.filename)
-                    continue
-                name = _safe_filename(f.filename)
-                # De-dupe if multiple files have the same sanitised name.
-                count = seen.get(name, 0)
-                if count > 0:
-                    root, _, ext = name.rpartition(".")
-                    name = f"{root} ({count}).{ext}" if root else f"{name} ({count})"
-                seen[_safe_filename(f.filename)] = count + 1
-                zf.writestr(name, resp.content)
+    tmp = tempfile.SpooledTemporaryFile(max_size=16 * 1024 * 1024, mode="w+b")
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+                seen: dict[str, int] = {}
+                for f in files:
+                    try:
+                        resp = await client.get(
+                            f.url, headers={"Authorization": f"Bearer {pat}"}
+                        )
+                        resp.raise_for_status()
+                    except Exception:
+                        logger.warning("download_all: fetch failed for %s", f.filename)
+                        continue
+                    name = _safe_filename(f.filename)
+                    # De-dupe if multiple files have the same sanitised name.
+                    count = seen.get(name, 0)
+                    if count > 0:
+                        root, _, ext = name.rpartition(".")
+                        name = f"{root} ({count}).{ext}" if root else f"{name} ({count})"
+                    seen[_safe_filename(f.filename)] = count + 1
+                    zf.writestr(name, resp.content)
+                    # Drop the response body before the next fetch so we don't
+                    # carry every file's bytes in memory at once.
+                    del resp
+    except Exception:
+        tmp.close()
+        raise
 
-    buf.seek(0)
+    tmp.seek(0)
     zip_name = _safe_filename(f"{course.name} — materials") + ".zip"
+
+    def _stream_zip():
+        try:
+            while True:
+                chunk = tmp.read(256 * 1024)
+                if not chunk:
+                    return
+                yield chunk
+        finally:
+            tmp.close()
+
     return StreamingResponse(
-        iter([buf.getvalue()]),
+        _stream_zip(),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
     )
