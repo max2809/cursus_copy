@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     rag_top_k_rerank: int = 5
     rag_max_upload_mb: int = 50
     rag_claude_model: str = "claude-sonnet-4-6"
+    rag_rewriter_model: str = "claude-haiku-4-5-20251001"
 
     def master_key_bytes(self) -> bytes:
         raw = base64.b64decode(self.studybuddy_master_key)

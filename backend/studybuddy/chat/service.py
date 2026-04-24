@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from studybuddy.chat.prompts import build_context_block, build_messages, build_system_prompt
+from studybuddy.chat.query_rewriter import rewrite_query
 from studybuddy.db.models import ChatMessage, ChatSession, Chunk, User
 from studybuddy.rag.retrieval import retrieve_chunks
 
@@ -55,6 +56,7 @@ async def answer_and_stream(
     top_k_recall: int,
     top_k_rerank: int,
     claude_model: str,
+    rewriter_model: str | None = None,
     max_output_tokens: int = 2048,
     today=None,  # datetime.date — injected so Claude can resolve "last lecture" etc.
     course_start_date=None,  # datetime.date — optional; enables "we're in week N"
@@ -72,13 +74,24 @@ async def answer_and_stream(
     db.add(ChatMessage(session_id=session.id, role="user", content=user_text))
     await db.flush()
 
-    query_embedding = await embedder.embed_query(user_text)
+    # Resolve pronouns against recent turns so "quiz me on that" retrieves the
+    # right material. We rewrite only for retrieval — Claude still sees the
+    # user's original wording.
+    retrieval_query = user_text
+    if rewriter_model:
+        retrieval_query = await rewrite_query(
+            claude_client=claude_client,
+            model=rewriter_model,
+            history=[{"role": m.role, "content": m.content} for m in history],
+            user_text=user_text,
+        )
+    query_embedding = await embedder.embed_query(retrieval_query)
     top_chunks = await retrieve_chunks(
         db,
         user_id=user.id,
         course_id=session.course_id,
         query_embedding=query_embedding,
-        query_text=user_text,
+        query_text=retrieval_query,
         top_k_recall=top_k_recall,
         top_k_rerank=top_k_rerank,
         reranker=reranker,
