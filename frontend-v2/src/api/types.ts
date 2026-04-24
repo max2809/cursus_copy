@@ -72,6 +72,14 @@ export interface MaterialsListResponse {
   materials: MaterialItem[];
 }
 
+export type CitationSourceKind =
+  | "canvas"
+  | "canvas_page"
+  | "canvas_syllabus"
+  | "upload"
+  | "url"
+  | "deadline";
+
 export interface Citation {
   marker: number;
   chunk_id: string | null;
@@ -80,6 +88,9 @@ export interface Citation {
   page_hint: number | null;
   heading_path: string | null;
   snippet: string;
+  source_name?: string | null;
+  source_kind?: CitationSourceKind | null;
+  source_url?: string | null;
 }
 
 export interface ChatMessageItem {

@@ -1465,7 +1465,11 @@ input, textarea { font-family: inherit; color: inherit; }
   font-size: 13px; font-weight: 500;
   color: var(--ink-2);
   transition: all var(--fast);
+  text-decoration: none;
+  cursor: pointer;
+  justify-content: center;
 }
+.cite-drawer-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
 .cite-drawer-btn svg { width: 13px; height: 13px; }
 .cite-drawer-btn:hover { border-color: var(--hair-2); color: var(--ink); background: var(--bg-sunken); }
 .cite-drawer-btn.primary {

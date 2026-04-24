@@ -93,6 +93,29 @@ async def test_answer_streams_tokens_and_persists_citations(db):
 
 
 @pytest.mark.asyncio
+async def test_answer_populates_source_url_for_pdf_citation(db):
+    u, c, s = await _setup(db)
+    # Our _setup chunk is from a canvas PDF ("algo.pdf") with page_hint=2.
+    claude = FakeClaude(chunks=["Big-O is complexity [1]."])
+    events: list[StreamEvent] = []
+    async for ev in answer_and_stream(
+        db, user=u, session_id=s.id, user_text="Big-O?",
+        embedder=FakeEmbedder(), reranker=FakeReranker(), claude_client=claude,
+        course_name=c.name, canvas_base_url="canvas.eur.nl",
+        top_k_recall=5, top_k_rerank=3, claude_model="claude-sonnet-4-6",
+        canvas_course_id=1,
+    ):
+        events.append(ev)
+    await db.commit()
+
+    done = [e for e in events if e.kind == "done"][0]
+    cite = done.citations[0]
+    assert cite["source_name"] == "algo.pdf"
+    assert cite["source_kind"] == "canvas"
+    assert cite["source_url"] == "/api/courses/1/materials/" + cite["file_id"] + "/download#page=2"
+
+
+@pytest.mark.asyncio
 async def test_answer_handles_stream_error_midway(db):
     u, c, s = await _setup(db)
     claude = FakeClaude(chunks=["Hello ", "world"], raise_after=1)

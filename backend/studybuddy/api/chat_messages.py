@@ -77,6 +77,7 @@ async def post_message(
                 top_k_rerank=settings.rag_top_k_rerank,
                 claude_model=settings.rag_claude_model,
                 rewriter_model=settings.rag_rewriter_model,
+                canvas_course_id=canvas_course_id,
                 today=date.today(),
                 course_start_date=course.start_date,
             ):
