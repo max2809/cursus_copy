@@ -16,7 +16,7 @@ from typing import Any, AsyncIterator, Protocol
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from studybuddy.chat.prompts import build_context_block, build_messages, build_system_prompt
+from studybuddy.chat.prompts import ChatMode, build_context_block, build_messages, build_system_prompt
 from studybuddy.chat.query_rewriter import rewrite_query
 from studybuddy.db.models import ChatMessage, ChatSession, Chunk, Deadline, File, User
 from studybuddy.rag.retrieval import retrieve_chunks
@@ -57,6 +57,7 @@ async def answer_and_stream(
     top_k_rerank: int,
     claude_model: str,
     rewriter_model: str | None = None,
+    chat_mode: ChatMode = "tutor",
     canvas_course_id: int | None = None,  # needed to build source_url for citations
     max_output_tokens: int = 2048,
     today=None,  # datetime.date — injected so Claude can resolve "last lecture" etc.
@@ -107,6 +108,7 @@ async def answer_and_stream(
     system_prompt = build_system_prompt(
         course_name=course_name,
         canvas_base_url=canvas_base_url,
+        chat_mode=chat_mode,
         today=today,
         course_start_date=course_start_date,
     )

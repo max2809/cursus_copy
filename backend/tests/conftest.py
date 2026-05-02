@@ -58,6 +58,8 @@ async def client(db, test_engine, monkeypatch):
     # Also patch references that were imported at module load time.
     from studybuddy.api import materials as materials_mod
     monkeypatch.setattr(materials_mod, "AsyncSessionLocal", test_sessionmaker)
+    from studybuddy.sync import background as sync_background_mod
+    monkeypatch.setattr(sync_background_mod, "AsyncSessionLocal", test_sessionmaker)
 
     app.dependency_overrides[get_db] = override_get_db
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

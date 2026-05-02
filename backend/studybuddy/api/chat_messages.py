@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,6 +27,7 @@ router = APIRouter(
 
 class MessagePayload(BaseModel):
     content: str = Field(min_length=1)
+    mode: Literal["tutor", "quiz", "flashcards"] = "tutor"
 
 
 @router.post("")
@@ -68,6 +70,7 @@ async def post_message(
                 user=user,
                 session_id=session.id,
                 user_text=text,
+                chat_mode=payload.mode,
                 embedder=embedder,
                 reranker=reranker,
                 claude_client=claude,

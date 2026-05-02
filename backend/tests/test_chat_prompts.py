@@ -69,6 +69,27 @@ def test_system_prompt_mentions_math_delimiters():
     assert "$...$" in p and "$$...$$" in p
 
 
+def test_system_prompt_adds_quiz_mode_instructions():
+    p = build_system_prompt(
+        course_name="X",
+        canvas_base_url="canvas",
+        chat_mode="quiz",
+    )
+    assert "Mode: Quiz" in p
+    assert "practice questions" in p
+
+
+def test_system_prompt_adds_flashcard_mode_instructions():
+    p = build_system_prompt(
+        course_name="X",
+        canvas_base_url="canvas",
+        chat_mode="flashcards",
+    )
+    assert "Mode: Flashcards" in p
+    assert "front" in p
+    assert "back" in p
+
+
 def test_context_block_empty_when_no_chunks():
     assert build_context_block([]) == ""
 

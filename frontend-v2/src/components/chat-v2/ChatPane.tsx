@@ -6,6 +6,7 @@ import {
   listSessions,
   streamMessage,
 } from "../../api/chat";
+import type { ChatMode } from "../../api/chat";
 import type {
   ChatMessageItem,
   Citation,
@@ -35,8 +36,6 @@ interface Props {
   onCollapse?: () => void;
   userInitials?: string;
 }
-
-type ChatMode = "tutor" | "quiz" | "flashcards";
 
 const MODES: { id: ChatMode; label: string; hint: string; Icon: (p: any) => JSX.Element }[] = [
   { id: "tutor", label: "Tutor", hint: "Socratic explanation with citations", Icon: IconChat },
@@ -145,6 +144,7 @@ export function ChatPane({
       canvasCourseId,
       sid!,
       trimmed,
+      mode,
       {
         onToken: (t) =>
           setStreaming((prev) => (prev ? { ...prev, content: prev.content + t } : prev)),

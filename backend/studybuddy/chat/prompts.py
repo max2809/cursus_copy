@@ -8,7 +8,7 @@ structured citation rows.
 """
 from __future__ import annotations
 from datetime import date
-from typing import Iterable, Mapping
+from typing import Iterable, Literal, Mapping
 from uuid import UUID
 from studybuddy.db.models import Chunk
 
@@ -18,6 +18,7 @@ _SYSTEM_TEMPLATE = (
     "You have access to course materials (lecture slides, readings, assignment "
     "briefs, and anything the user has uploaded).\n\n"
     "{temporal_context}"
+    "{mode_context}"
     "Rules:\n"
     "- Answer using ONLY the provided context blocks below. If the context "
     "does not contain the answer, say so plainly — do not invent facts or draw "
@@ -39,11 +40,30 @@ _SYSTEM_TEMPLATE = (
     "scheduled lecture that's already passed."
 )
 
+ChatMode = Literal["tutor", "quiz", "flashcards"]
+
+_MODE_INSTRUCTIONS: dict[str, str] = {
+    "tutor": (
+        "Mode: Tutor. Explain concepts clearly, ask brief Socratic follow-up "
+        "questions when useful, and help the student reason from the cited material.\n\n"
+    ),
+    "quiz": (
+        "Mode: Quiz. Generate practice questions from the cited material. Include "
+        "the answer or explanation after each question unless the user asks to be "
+        "quizzed one question at a time.\n\n"
+    ),
+    "flashcards": (
+        "Mode: Flashcards. Convert the cited material into concise flashcards. "
+        "Use a clear front and back for each card.\n\n"
+    ),
+}
+
 
 def build_system_prompt(
     *,
     course_name: str,
     canvas_base_url: str,
+    chat_mode: ChatMode = "tutor",
     today: date | None = None,
     course_start_date: date | None = None,
 ) -> str:
@@ -59,6 +79,7 @@ def build_system_prompt(
         course_name=course_name,
         canvas_base_url=canvas_base_url,
         temporal_context=temporal,
+        mode_context=_MODE_INSTRUCTIONS[chat_mode],
     )
 
 

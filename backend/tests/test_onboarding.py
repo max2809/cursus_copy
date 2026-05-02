@@ -11,10 +11,18 @@ async def test_onboarding_rejects_invalid_pat(authed_client, db, httpx_mock):
 
 
 @pytest.mark.asyncio
-async def test_onboarding_stores_encrypted_pat_and_syncs(authed_client, db, httpx_mock):
-    # Only the Canvas /users/self validation call is made synchronously; the
-    # full sync is dispatched to a BackgroundTask and doesn't fire inside the
-    # test's request lifecycle. Validate only that the PAT landed encrypted.
+async def test_onboarding_stores_encrypted_pat_and_syncs(authed_client, db, httpx_mock, monkeypatch):
+    # Starlette runs BackgroundTasks before the test client returns the
+    # response. Keep this endpoint test isolated from the full Canvas sync and
+    # assert the background task is scheduled.
+    sync_calls = []
+
+    async def fake_sync(user_id, master_key):
+        sync_calls.append((user_id, master_key))
+
+    from studybuddy.api import onboarding as onboarding_mod
+    monkeypatch.setattr(onboarding_mod, "sync_and_index_background", fake_sync)
+
     httpx_mock.add_response(
         method="GET",
         url="https://canvas.eur.nl/api/v1/users/self",
@@ -29,3 +37,5 @@ async def test_onboarding_stores_encrypted_pat_and_syncs(authed_client, db, http
     user = (await db.execute(select(User))).scalar_one()
     assert user.pat_encrypted is not None
     assert user.pat_nonce is not None
+    assert len(sync_calls) == 1
+    assert sync_calls[0][0] == user.id

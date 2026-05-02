@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CourseDeadlines, Deadline, MaterialItem } from "../../api/types";
 import { listMaterials, deleteMaterial, refreshMaterials } from "../../api/materials";
+import { API_BASE_URL } from "../../api/client";
 import { useSetDeadlineSubmission } from "../../api/queries";
 import { IconMax, IconRefresh, IconTrash, IconPlus } from "../../design/icons";
 import { CourseBadge } from "../shared/CourseBadge";
@@ -96,21 +97,23 @@ export function CoursePane({
   const setSubmission = useSetDeadlineSubmission();
   const canvasId = course.course.canvas_course_id;
 
-  async function reload() {
+  const reload = useCallback(async () => {
     const r = await listMaterials(canvasId);
     setMaterials(r.materials);
-  }
+  }, [canvasId]);
 
   useEffect(() => {
-    reload();
-  }, [canvasId]);
+    void reload();
+  }, [reload]);
 
   useEffect(() => {
     const pending = materials.some((m) => m.indexed_at === null && m.index_error === null);
     if (!pending) return;
-    const id = setInterval(reload, 5000);
+    const id = setInterval(() => {
+      void reload();
+    }, 5000);
     return () => clearInterval(id);
-  }, [materials.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [materials, reload]);
 
   async function handleRefresh() {
     setRefreshing(true);
@@ -257,11 +260,8 @@ export function CoursePane({
               if (downloading) return;
               setDownloading(true);
               try {
-                const base =
-                  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-                  "http://localhost:8000";
                 const resp = await fetch(
-                  `${base}/api/courses/${canvasId}/materials/download`,
+                  `${API_BASE_URL}/api/courses/${canvasId}/materials/download`,
                   { credentials: "include" },
                 );
                 if (!resp.ok) {
@@ -387,12 +387,9 @@ export function CoursePane({
                     type="button"
                     onClick={async (e) => {
                       e.stopPropagation();
-                      const base =
-                        (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-                        "http://localhost:8000";
                       try {
                         const resp = await fetch(
-                          `${base}/api/courses/${canvasId}/materials/${m.id}/download`,
+                          `${API_BASE_URL}/api/courses/${canvasId}/materials/${m.id}/download`,
                           { credentials: "include" },
                         );
                         if (!resp.ok) {

@@ -78,6 +78,7 @@ export function ChatTab({ canvasCourseId, courseName }: Props) {
       canvasCourseId,
       sid!,
       text,
+      "tutor",
       {
         onToken: (t) =>
           setStreaming((prev) => (prev ? { ...prev, content: prev.content + t } : prev)),
