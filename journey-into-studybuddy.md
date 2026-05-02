@@ -184,3 +184,40 @@ Reading the timeline end-to-end, a few themes rise:
 **What a new developer would learn from reading this timeline:** the Study Buddy codebase is small (27 commits, one user, one dashboard), but every commit has lineage. Architecture came from a spec that came from a brainstorm. Tests exist because pytest was made to work on a hostile platform. The production config reflects real constraints discovered at deploy time, not assumed from documentation. The Clay aesthetic is deliberate and carried end-to-end. Nothing in this repo is there by accident.
 
 If you forked this tomorrow and asked "why is SameSite set this way / why aiosqlite in tests / why the `_safe_get` 403 fallback / why the 30-day recency cutoff" — the timeline answers each one with a specific observation ID and a specific lesson learned the hard way.
+
+## 11. Postscript: Frontend V2, Vercel, and Multi-University Canvas (May 2, 2026)
+
+The next major continuity point happened on **May 2, 2026**, after the project had been renamed in practice from Study Buddy toward **Cursus** and the user fully switched to `frontend-v2`.
+
+The first problem was deployment safety. An adversarial review found that the frontend-v2 path was still too easy to misdeploy: API calls could silently fall back to localhost, Vercel could build the wrong frontend root, and chat mode selection was not reliably carried through the full frontend-to-backend path. Commit `8ddb140` (`fix: harden frontend-v2 deployment path`) tightened this up:
+
+- `frontend-v2` now requires `VITE_API_BASE_URL` for production builds.
+- Localhost fallback is dev-only.
+- API base resolution is covered by frontend tests.
+- Chat modes (`tutor`, `quiz`, `flashcards`) now travel from frontend request to backend prompt.
+- CoursePane polling behavior was fixed and tested.
+- Backend onboarding/background tests were isolated so the suite stays reliable.
+
+Verification for that work was broad: frontend tests passed, frontend production build passed with the expected large-chunk warning, and backend pytest passed (`127 passed` at that point). The commit was pushed to GitHub because Vercel deploys from GitHub. The operational reminder from this work: Vercel must build from `frontend-v2`, and the Vercel project must have `VITE_API_BASE_URL` configured.
+
+The second problem was access control and Canvas portability. A user from another university could be allowlisted, receive a magic link, and then fail onboarding because Cursus validated every PAT against `canvas.eur.nl`. Investigation showed the root cause clearly: the onboarding endpoint used global `CANVAS_BASE_URL` for `/api/v1/users/self`, even though the `users` table already had a per-user `canvas_base_url` column and sync already used it.
+
+After discussing OAuth, the decision was to keep the invite-only allowlist and improve the PAT flow instead. OAuth would give a nicer "Connect with Canvas" experience, but it still needs the Canvas install URL first and requires a Canvas Developer Key. A per-university key must be created by that university's Canvas admin; a global Instructure key is a larger vendor/partnership path. PATs are therefore still the practical route for "any Canvas university" while Cursus lacks billing, quota enforcement, and stronger public auth.
+
+Commit `a2c84ff` (`docs: specify multi-university Canvas support`) captured the design and intentionally removed the old frontend-v1 `DESIGN.md` file. Commit `c7e38cf` (`feat: support multiple Canvas universities`) shipped the implementation:
+
+- Onboarding now asks for `Canvas URL or domain` plus the Canvas PAT.
+- Settings can update both the Canvas domain and PAT.
+- The frontend accepts bare domains or pasted Canvas URLs and submits `{ pat, canvas_base_url }`.
+- The backend normalizes the Canvas host, rejects unsafe hosts, resolves DNS, blocks private/internal targets, validates the token against the selected Canvas host, then saves `users.canvas_base_url`.
+- `/api/auth/me` was added so Settings can prefill the saved Canvas host.
+- Sync, downloads, citations, pages, and syllabus flows continue through the already-existing per-user `canvas_base_url`.
+
+Verification after the multi-university work:
+
+- Backend full suite: `144 passed`.
+- Frontend full suite: `13 passed`.
+- Frontend production build passed with the existing large-chunk warning.
+- Both commits were pushed to `main` on GitHub (`8ddb140..c7e38cf`), leaving only the pre-existing untracked `13012-1776438198/` folder untouched.
+
+The standing process change from this session: after every major Cursus update, update this journey file and the Codex memory file so the project history does not drift from the code.
