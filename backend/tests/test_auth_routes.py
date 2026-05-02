@@ -2,6 +2,7 @@ import re
 import pytest
 from sqlalchemy import select
 from studybuddy.db.models import User, MagicLinkToken, Session as SessionModel
+from studybuddy.auth.session import create_session
 
 
 @pytest.mark.asyncio
@@ -83,3 +84,27 @@ async def test_logout_clears_cookie(client, db, httpx_mock):
 
     resp = await client.delete("/api/auth/session")
     assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_me_returns_authenticated_account_state(client, db):
+    user = User(
+        email="a@eur.nl",
+        canvas_base_url="canvas.other.edu",
+        pat_encrypted=b"ciphertext",
+        pat_nonce=b"nonce",
+    )
+    db.add(user)
+    await db.commit()
+    session_token = await create_session(db, user)
+    await db.commit()
+    client.cookies.set("sb_session", session_token)
+
+    resp = await client.get("/api/auth/me")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "email": "a@eur.nl",
+        "canvas_base_url": "canvas.other.edu",
+        "has_pat": True,
+    }

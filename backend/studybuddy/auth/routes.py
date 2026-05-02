@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from studybuddy.auth.magic_link import create_magic_link, verify_magic_link
 from studybuddy.auth.session import create_session, delete_session
-from studybuddy.auth.deps import SESSION_COOKIE_NAME
+from studybuddy.auth.deps import SESSION_COOKIE_NAME, current_user
 from studybuddy.config import get_settings
 from studybuddy.db.base import get_db
 from studybuddy.db.models import User
@@ -24,6 +24,12 @@ class MagicLinkRequest(BaseModel):
 
 class VerifyRequest(BaseModel):
     token: str
+
+
+class MeResponse(BaseModel):
+    email: EmailStr
+    canvas_base_url: str
+    has_pat: bool
 
 
 @router.post("/magic-link")
@@ -73,6 +79,15 @@ async def verify(payload: VerifyRequest, response: Response, db: AsyncSession = 
         max_age=60 * 60 * 24 * 30,
     )
     return {"next": next_path}
+
+
+@router.get("/me", response_model=MeResponse)
+async def me(user: User = Depends(current_user)):
+    return MeResponse(
+        email=user.email,
+        canvas_base_url=user.canvas_base_url,
+        has_pat=user.pat_encrypted is not None and user.pat_nonce is not None,
+    )
 
 
 @router.delete("/session", status_code=204)

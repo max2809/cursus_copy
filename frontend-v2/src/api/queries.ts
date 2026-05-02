@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { listCourses, updateCourseStatus } from "./courses";
+import { getAccount, submitPat, type SubmitPatPayload } from "./onboarding";
 import type { CourseStatus, DeadlinesResponse } from "./types";
 
 export function useDeadlines() {
@@ -39,15 +40,22 @@ export function useVerifyToken() {
   });
 }
 
+export function useAccount() {
+  return useQuery({
+    queryKey: ["account"],
+    queryFn: getAccount,
+    retry: false,
+  });
+}
+
 export function useSubmitPat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (pat: string) =>
-      apiFetch<{ ok: true }>("/api/onboarding/pat", {
-        method: "POST",
-        body: JSON.stringify({ pat }),
-      }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deadlines"] }),
+    mutationFn: (payload: SubmitPatPayload) => submitPat(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["account"] });
+      qc.invalidateQueries({ queryKey: ["deadlines"] });
+    },
   });
 }
 

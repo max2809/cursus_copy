@@ -1,22 +1,55 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSubmitPat } from "../api/queries";
+import { ApiError } from "../api/client";
 import Logo from "../components/Logo";
 
+function canvasSettingsUrl(value: string): string {
+  const host = value
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .split("/")[0]
+    .trim();
+  return `https://${host || "canvas.eur.nl"}/profile/settings`;
+}
+
+function connectionErrorMessage(error: unknown): string {
+  if (
+    error instanceof ApiError &&
+    error.body &&
+    typeof error.body === "object" &&
+    "detail" in error.body
+  ) {
+    const detail = String((error.body as { detail: unknown }).detail);
+    if (detail === "Invalid Canvas domain") {
+      return "Enter the Canvas domain your university uses.";
+    }
+    if (detail === "Could not reach that Canvas domain") {
+      return "Cursus could not reach that Canvas domain.";
+    }
+  }
+  return "Canvas rejected that token. Double-check the domain and token.";
+}
+
 export default function Onboarding() {
+  const [canvasBaseUrl, setCanvasBaseUrl] = useState("canvas.eur.nl");
   const [pat, setPat] = useState("");
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const mut = useSubmitPat();
+  const settingsUrl = canvasSettingsUrl(canvasBaseUrl);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     try {
-      await mut.mutateAsync(pat);
+      await mut.mutateAsync({
+        pat,
+        canvas_base_url: canvasBaseUrl,
+      });
       navigate("/", { replace: true });
-    } catch {
-      setError("Canvas rejected that token. Double-check you copied all of it.");
+    } catch (err) {
+      setError(connectionErrorMessage(err));
     }
   };
 
@@ -39,11 +72,11 @@ export default function Onboarding() {
               <li>
                 Go to{" "}
                 <a
-                  href="https://canvas.eur.nl/profile/settings"
+                  href={settingsUrl}
                   target="_blank"
                   rel="noreferrer"
                 >
-                  canvas.eur.nl/profile/settings
+                  {settingsUrl.replace(/^https:\/\//, "")}
                 </a>
               </li>
               <li>Scroll to <em>Approved Integrations</em></li>
@@ -53,6 +86,19 @@ export default function Onboarding() {
             </ol>
 
             <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <label>
+                <span className="auth-label">Canvas URL or domain</span>
+                <input
+                  type="text"
+                  required
+                  value={canvasBaseUrl}
+                  onChange={(e) => setCanvasBaseUrl(e.target.value)}
+                  className="auth-input mono"
+                  placeholder="canvas.your-university.edu"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
+              </label>
               <label>
                 <span className="auth-label">Canvas token</span>
                 <input
