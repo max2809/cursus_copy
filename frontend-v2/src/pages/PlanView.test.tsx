@@ -73,7 +73,34 @@ describe("PlanView weekly checklist", () => {
     });
   });
 
-  it("sorts the selectable course list alphabetically", () => {
+  it("puts selected and currently-taking courses before other courses", () => {
+    mocks.studyPlanState = currentPayload({
+      available_courses: [
+        {
+          id: "course-1",
+          canvas_course_id: 101,
+          name: "Accounting",
+          code: "ACC101",
+          status: "taking",
+        },
+        {
+          id: "course-2",
+          canvas_course_id: 202,
+          name: "Biology",
+          code: "BIO202",
+          status: "taken",
+        },
+        {
+          id: "course-3",
+          canvas_course_id: 303,
+          name: "Zoology",
+          code: "ZOO303",
+          status: "taken",
+        },
+      ],
+      selected_canvas_course_ids: [303],
+    });
+
     render(<PlanView courses={[]} />);
 
     const courseOptions = screen.getAllByRole("checkbox").map((option) =>
@@ -81,8 +108,9 @@ describe("PlanView weekly checklist", () => {
     );
 
     expect(courseOptions).toEqual([
-      "Finance (taken)",
-      "Microeconomics (taking)",
+      "Zoology (taken)",
+      "Accounting (taking)",
+      "Biology (taken)",
     ]);
   });
 

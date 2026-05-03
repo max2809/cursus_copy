@@ -71,12 +71,31 @@ export function PlanView({ courses }: Props) {
   const { data, isLoading, error } = useStudyPlan();
   const generatePlan = useGenerateStudyPlan();
   const setTaskDone = useSetStudyPlanTaskDone();
-  const availableCourses = useMemo(
+  const [selected, setSelected] = useState<Set<number>>(
+    () => new Set(data?.selected_canvas_course_ids ?? []),
+  );
+  const alphabetizedCourses = useMemo(
     () => [...(data?.available_courses ?? fallbackCourses(courses))].sort(compareCourses),
     [courses, data?.available_courses],
   );
+  const availableCourses = useMemo(
+    () =>
+      [...alphabetizedCourses].sort((a, b) => {
+        const aRank = selected.has(a.canvas_course_id)
+          ? 0
+          : a.status === "taking"
+            ? 1
+            : 2;
+        const bRank = selected.has(b.canvas_course_id)
+          ? 0
+          : b.status === "taking"
+            ? 1
+            : 2;
+        return aRank - bRank || compareCourses(a, b);
+      }),
+    [alphabetizedCourses, selected],
+  );
   const plan = data?.plan ?? null;
-  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const selectedKey = (data?.selected_canvas_course_ids ?? [])
     .slice()
