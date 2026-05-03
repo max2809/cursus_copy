@@ -244,3 +244,27 @@ Verification for the citation reliability work:
 - Frontend production build passed with the existing large-chunk warning.
 
 The remaining known limitation is deeper than this patch: Cursus still trusts the model's chosen `[N]` marker once retrieval has selected the context. The May 3 fix makes the UI and drawer metadata faithful to the model's selected chunk, and makes the excerpt more useful, but future work could add post-generation citation verification or exact quote extraction if citation precision needs to become stricter.
+
+## 13. Weekly Course Checklists Replace Study Plan (May 3, 2026)
+
+Later on **May 3, 2026**, the user decided the old `Study plan` page should stop being a calendar-style planner or a deadline-only list. The product direction became a **weekly checklist per course**: auto-select currently-taking courses, let the user include/exclude courses for this plan, then generate concrete course-specific steps for the next seven days without assigning exact study times.
+
+Commit `11a4911` (`feat: add weekly course checklists`) shipped the first durable slice:
+
+- Added a persisted `study_plans` table via Alembic migration `0005_study_plans`.
+- Added `/api/study-plan/current`, `/api/study-plan/generate`, and `/api/study-plan/tasks/{task_id}`.
+- Stored plan payloads as JSON plus `completed_task_ids`, keeping the data model flexible while preserving checkbox state.
+- Generated deterministic weekly plans from existing Cursus data instead of spending LLM tokens: selected courses, incomplete deadlines, indexed files/pages/syllabus chunks, and source references.
+- Replaced `frontend-v2` `PlanView` with a weekly checklist UI: course selector, pressure points, one checklist section per course, source chips, priorities, and task completion.
+- Invalidated the study-plan query after Canvas sync, PAT replacement, course status changes, deadline completion, plan generation, and task toggles.
+- Made the existing deadline bucketing test deterministic by freezing the test/API clocks, because its previous `now + 3 hours` assumption failed late in the Amsterdam day.
+- Saved the implementation plan at `docs/superpowers/plans/2026-05-03-weekly-checklist-plan.md`.
+
+Verification for the weekly checklist feature:
+
+- Backend full suite: `148 passed`.
+- Frontend full suite: `17 passed`.
+- Frontend production build passed with the existing large-chunk warning.
+- Alembic offline SQL generation for `0004_deadline_manual_submit:head` passed and produced the `study_plans` table/index.
+
+This is intentionally not yet an LLM-generated academic planner. The MVP is deterministic and source-aware so it is cheap, testable, and safe. A later version can layer an LLM topic decomposer on top of the same stored plan contract if the deterministic source headings are not nuanced enough.
