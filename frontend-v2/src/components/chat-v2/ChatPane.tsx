@@ -182,23 +182,9 @@ export function ChatPane({
     setError(null);
   }
 
-  function openCite(n: number) {
-    const messages = detail?.messages ?? [];
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === "assistant" && m.citations_json) {
-        const hit = m.citations_json.find((c) => c.marker === n);
-        if (hit) {
-          setDrawer(hit);
-          return;
-        }
-      }
-    }
-    const streamCites = streaming?.citations;
-    if (streamCites) {
-      const hit = streamCites.find((c) => c.marker === n);
-      if (hit) setDrawer(hit);
-    }
+  function openCite(citations: Citation[] | null | undefined, n: number) {
+    const hit = citations?.find((c) => c.marker === n);
+    if (hit) setDrawer(hit);
   }
 
   async function retryLast() {
@@ -366,7 +352,7 @@ export function ChatPane({
               key={m.id}
               msg={m}
               userInitials={userInitials}
-              onCiteClick={openCite}
+              onCiteClick={(n) => openCite(m.citations_json, n)}
               onSuggest={(text) => handleSend(text)}
             />
           ))}
@@ -386,7 +372,7 @@ export function ChatPane({
                   {streaming.content ? (
                     <MarkdownWithCites
                       content={streaming.content + "▍"}
-                      onCiteClick={openCite}
+                      onCiteClick={(n) => openCite(streaming.citations, n)}
                     />
                   ) : (
                     <div className="typing">

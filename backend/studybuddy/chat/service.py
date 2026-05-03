@@ -40,6 +40,38 @@ class _Reranker(Protocol):
 
 
 _CITE_RE = re.compile(r"\[(\d+)\]")
+_WORD_RE = re.compile(r"[a-z0-9][a-z0-9'-]*", re.IGNORECASE)
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
+_SNIPPET_MAX_CHARS = 320
+_STOPWORDS = {
+    "about",
+    "after",
+    "also",
+    "because",
+    "before",
+    "being",
+    "between",
+    "could",
+    "does",
+    "from",
+    "have",
+    "into",
+    "only",
+    "over",
+    "that",
+    "their",
+    "there",
+    "these",
+    "this",
+    "through",
+    "what",
+    "when",
+    "where",
+    "which",
+    "while",
+    "with",
+    "would",
+}
 
 
 async def answer_and_stream(
@@ -240,7 +272,10 @@ async def _extract_citations(
         if not (1 <= n <= len(chunks)):
             continue
         c = chunks[n - 1]
-        snippet = c.content_text[:180].replace("\n", " ").strip()
+        snippet = _best_citation_snippet(
+            c.content_text,
+            claim=_claim_before_marker(text, n),
+        )
         source_name: str | None = None
         source_kind: str | None = None
         source_url: str | None = None
@@ -272,6 +307,65 @@ async def _extract_citations(
             "source_url": source_url,
         })
     return result
+
+
+def _claim_before_marker(text: str, marker: int) -> str:
+    for match in _CITE_RE.finditer(text):
+        if int(match.group(1)) == marker:
+            prefix = text[:match.start()].strip()
+            return _last_sentence_fragment(prefix)
+    return ""
+
+
+def _last_sentence_fragment(text: str) -> str:
+    cleaned = text.rstrip()
+    if not cleaned:
+        return ""
+    if cleaned[-1:] in ".?!":
+        cleaned = cleaned[:-1].rstrip()
+    start = max(
+        cleaned.rfind("."),
+        cleaned.rfind("?"),
+        cleaned.rfind("!"),
+        cleaned.rfind("\n"),
+    )
+    return cleaned[start + 1:].strip(" \t\r\n-*:")
+
+
+def _best_citation_snippet(content_text: str, *, claim: str) -> str:
+    candidates = [
+        candidate.strip()
+        for candidate in _SENTENCE_SPLIT_RE.split(content_text)
+        if candidate.strip()
+    ]
+    if not candidates:
+        return _clip_snippet(content_text)
+
+    claim_words = _content_words(claim)
+    best = candidates[0]
+    best_score = 0
+    for candidate in candidates:
+        overlap = len(claim_words & _content_words(candidate))
+        if overlap > best_score:
+            best = candidate
+            best_score = overlap
+
+    return _clip_snippet(best if best_score else content_text)
+
+
+def _content_words(text: str) -> set[str]:
+    return {
+        word.lower()
+        for word in _WORD_RE.findall(text)
+        if len(word) > 2 and word.lower() not in _STOPWORDS
+    }
+
+
+def _clip_snippet(text: str) -> str:
+    normalized = " ".join(text.split()).strip()
+    if len(normalized) <= _SNIPPET_MAX_CHARS:
+        return normalized
+    return normalized[: _SNIPPET_MAX_CHARS - 3].rstrip() + "..."
 
 
 async def _fetch_files_by_id(db: AsyncSession, ids: set) -> dict:

@@ -43,7 +43,7 @@ class FakeClaude:
         return _Ctx()
 
 
-async def _setup(db):
+async def _setup(db, *, chunk_text: str = "Big-O describes complexity."):
     u = User(email="a@eur.nl"); db.add(u); await db.flush()
     c = Course(user_id=u.id, canvas_course_id=1, name="CS"); db.add(c); await db.flush()
     f = FileModel(user_id=u.id, course_id=c.id, canvas_file_id=10,
@@ -51,7 +51,7 @@ async def _setup(db):
     db.add(f); await db.flush()
     db.add(Chunk(
         user_id=u.id, course_id=c.id, file_id=f.id, source_kind="file",
-        content_text="Big-O describes complexity.", chunk_index=0, token_count=4,
+        content_text=chunk_text, chunk_index=0, token_count=4,
         heading_path="Ch1", page_hint=2, embedding=[1.0] + [0.0] * 511,
     ))
     s = ChatSession(user_id=u.id, course_id=c.id, title="Untitled")
@@ -113,6 +113,26 @@ async def test_answer_populates_source_url_for_pdf_citation(db):
     assert cite["source_name"] == "algo.pdf"
     assert cite["source_kind"] == "canvas"
     assert cite["source_url"] == "/api/courses/1/materials/" + cite["file_id"] + "/download#page=2"
+
+
+@pytest.mark.asyncio
+async def test_answer_uses_claim_focused_citation_snippet(db):
+    intro = "Administrative overview only. " * 12
+    supporting_sentence = "Big-O describes how algorithm runtime grows as input size increases."
+    u, c, s = await _setup(db, chunk_text=f"{intro}{supporting_sentence}")
+    claude = FakeClaude(chunks=["Big-O describes runtime growth [1]."])
+    events: list[StreamEvent] = []
+    async for ev in answer_and_stream(
+        db, user=u, session_id=s.id, user_text="What is Big-O?",
+        embedder=FakeEmbedder(), reranker=FakeReranker(), claude_client=claude,
+        course_name=c.name, canvas_base_url="canvas.eur.nl",
+        top_k_recall=5, top_k_rerank=3, claude_model="claude-sonnet-4-6",
+    ):
+        events.append(ev)
+    await db.commit()
+
+    done = [e for e in events if e.kind == "done"][0]
+    assert supporting_sentence in done.citations[0]["snippet"]
 
 
 @pytest.mark.asyncio
