@@ -71,6 +71,8 @@ export function PlanView({ courses }: Props) {
   const { data, isLoading, error } = useStudyPlan();
   const generatePlan = useGenerateStudyPlan();
   const setTaskDone = useSetStudyPlanTaskDone();
+  const [showAllCourses, setShowAllCourses] = useState(false);
+  const [activePlanCanvasCourseId, setActivePlanCanvasCourseId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Set<number>>(
     () => new Set(data?.selected_canvas_course_ids ?? []),
   );
@@ -96,6 +98,9 @@ export function PlanView({ courses }: Props) {
     [alphabetizedCourses, selected],
   );
   const plan = data?.plan ?? null;
+  const planCourseKey = (plan?.courses ?? [])
+    .map((course) => course.canvas_course_id)
+    .join(",");
 
   const selectedKey = (data?.selected_canvas_course_ids ?? [])
     .slice()
@@ -107,12 +112,36 @@ export function PlanView({ courses }: Props) {
     setSelected(new Set(data.selected_canvas_course_ids));
   }, [data, selectedKey]);
 
+  useEffect(() => {
+    const planCourses = plan?.courses ?? [];
+    if (planCourses.length === 0) {
+      setActivePlanCanvasCourseId(null);
+      return;
+    }
+    setActivePlanCanvasCourseId((current) =>
+      current !== null && planCourses.some((course) => course.canvas_course_id === current)
+        ? current
+        : planCourses[0].canvas_course_id,
+    );
+  }, [plan, planCourseKey]);
+
   const selectedIds = useMemo(
     () => availableCourses
       .filter((course) => selected.has(course.canvas_course_id))
       .map((course) => course.canvas_course_id),
     [availableCourses, selected],
   );
+  const visibleCourses = useMemo(
+    () =>
+      showAllCourses
+        ? availableCourses
+        : availableCourses.filter(
+            (course) =>
+              selected.has(course.canvas_course_id) || course.status === "taking",
+          ),
+    [availableCourses, selected, showAllCourses],
+  );
+  const hiddenCourseCount = availableCourses.length - visibleCourses.length;
 
   function toggleCourse(canvasCourseId: number) {
     setSelected((prev) => {
@@ -162,10 +191,24 @@ export function PlanView({ courses }: Props) {
       <section className="plan-setup">
         <div className="section-head">
           <h3 className="section-title">Courses</h3>
-          <span className="count-tag">{selectedIds.length} selected</span>
+          <div className="plan-course-actions">
+            <span className="count-tag">{selectedIds.length} selected</span>
+            <button
+              className="plan-course-toggle"
+              type="button"
+              onClick={() => setShowAllCourses((value) => !value)}
+            >
+              {showAllCourses ? "Show compact list" : "Add/remove courses"}
+            </button>
+          </div>
         </div>
+        {!showAllCourses && hiddenCourseCount > 0 && (
+          <div className="plan-course-hint">
+            Showing selected and current courses. {hiddenCourseCount} more available.
+          </div>
+        )}
         <div className="plan-course-grid">
-          {availableCourses.map((course) => {
+          {visibleCourses.map((course) => {
             const checked = selected.has(course.canvas_course_id);
             return (
               <label
@@ -190,6 +233,11 @@ export function PlanView({ courses }: Props) {
             );
           })}
         </div>
+        {visibleCourses.length === 0 && (
+          <div className="plan-empty plan-empty-compact">
+            No current courses selected. Use Add/remove courses to choose what belongs in this checklist.
+          </div>
+        )}
       </section>
 
       {!plan ? (
@@ -198,49 +246,79 @@ export function PlanView({ courses }: Props) {
         </div>
       ) : (
         <>
-          <PressurePoints plan={plan} />
-          <div className="plan-course-list">
-            {plan.courses.map((course) => (
-              <section key={course.canvas_course_id} className="plan-course-section">
-                <div className="plan-course-head">
-                  <CourseBadge name={course.name} colorSeed={course.id} size={42} />
-                  <div>
-                    <h2>{course.name}</h2>
-                    <div>
-                      {shortCourseCode(course.code) || "No code"} - {course.tasks.length} steps - {course.confidence} confidence
-                    </div>
-                  </div>
-                </div>
-                <div className="plan-task-list">
-                  {course.tasks.map((task) => (
-                    <PlanTaskRow
-                      key={task.id}
-                      task={task}
-                      onToggle={() =>
-                        setTaskDone.mutate({ taskId: task.id, done: !task.done })
-                      }
-                    />
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
+          <PlanCourseTabs
+            plan={plan}
+            activeCanvasCourseId={activePlanCanvasCourseId}
+            onSelect={setActivePlanCanvasCourseId}
+          />
+          <PressurePoints plan={plan} canvasCourseId={activePlanCanvasCourseId} />
+          <ActivePlanCourse
+            plan={plan}
+            activeCanvasCourseId={activePlanCanvasCourseId}
+            onToggleTask={(task) =>
+              setTaskDone.mutate({ taskId: task.id, done: !task.done })
+            }
+          />
         </>
       )}
     </div>
   );
 }
 
-function PressurePoints({ plan }: { plan: StudyPlanPayload }) {
-  if (plan.pressure_points.length === 0) return null;
+function PlanCourseTabs({
+  plan,
+  activeCanvasCourseId,
+  onSelect,
+}: {
+  plan: StudyPlanPayload;
+  activeCanvasCourseId: number | null;
+  onSelect: (canvasCourseId: number) => void;
+}) {
+  if (plan.courses.length <= 1) return null;
+  const active = activeCanvasCourseId ?? plan.courses[0]?.canvas_course_id ?? null;
+  return (
+    <div className="plan-tabs" role="tablist" aria-label="Study plan courses">
+      {plan.courses.map((course) => (
+        <button
+          key={course.canvas_course_id}
+          className="plan-tab"
+          type="button"
+          role="tab"
+          aria-label={course.name}
+          aria-selected={active === course.canvas_course_id}
+          data-active={active === course.canvas_course_id}
+          onClick={() => onSelect(course.canvas_course_id)}
+        >
+          <CourseBadge name={course.name} colorSeed={course.id} size={28} />
+          <span>
+            <strong>{course.name}</strong>
+            <span>{course.tasks.length} steps</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PressurePoints({
+  plan,
+  canvasCourseId,
+}: {
+  plan: StudyPlanPayload;
+  canvasCourseId: number | null;
+}) {
+  const pressurePoints = canvasCourseId === null
+    ? plan.pressure_points
+    : plan.pressure_points.filter((point) => point.canvas_course_id === canvasCourseId);
+  if (pressurePoints.length === 0) return null;
   return (
     <section className="plan-pressure">
       <div className="section-head">
         <h3 className="section-title">This Week&apos;s Pressure Points</h3>
-        <span className="count-tag">{plan.pressure_points.length}</span>
+        <span className="count-tag">{pressurePoints.length}</span>
       </div>
       <div className="plan-pressure-grid">
-        {plan.pressure_points.map((point) => (
+        {pressurePoints.map((point) => (
           <div key={point.id} className="plan-pressure-item">
             <div className="plan-priority" data-priority={point.priority}>
               {PRIORITY_LABEL[point.priority]}
@@ -253,6 +331,46 @@ function PressurePoints({ plan }: { plan: StudyPlanPayload }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function ActivePlanCourse({
+  plan,
+  activeCanvasCourseId,
+  onToggleTask,
+}: {
+  plan: StudyPlanPayload;
+  activeCanvasCourseId: number | null;
+  onToggleTask: (task: StudyPlanTask) => void;
+}) {
+  const course =
+    plan.courses.find((entry) => entry.canvas_course_id === activeCanvasCourseId) ??
+    plan.courses[0] ??
+    null;
+  if (!course) return null;
+  return (
+    <div className="plan-course-list">
+      <section className="plan-course-section">
+        <div className="plan-course-head">
+          <CourseBadge name={course.name} colorSeed={course.id} size={42} />
+          <div>
+            <h2>{course.name}</h2>
+            <div>
+              {shortCourseCode(course.code) || "No code"} - {course.tasks.length} steps - {course.confidence} confidence
+            </div>
+          </div>
+        </div>
+        <div className="plan-task-list">
+          {course.tasks.map((task) => (
+            <PlanTaskRow
+              key={task.id}
+              task={task}
+              onToggle={() => onToggleTask(task)}
+            />
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
 

@@ -1072,6 +1072,32 @@ input, textarea { font-family: inherit; color: inherit; }
 .plan-course-section {
   margin-bottom: var(--pad-5);
 }
+.plan-course-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.plan-course-toggle {
+  border: 1px solid var(--hair);
+  border-radius: var(--r-sm);
+  background: var(--bg-elev);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 9px;
+}
+.plan-course-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.plan-course-hint {
+  color: var(--ink-3);
+  font-size: 12px;
+  margin: -4px 0 10px;
+}
 .plan-course-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1121,6 +1147,53 @@ input, textarea { font-family: inherit; color: inherit; }
   border: 1px dashed var(--hair);
   border-radius: var(--r-md);
   color: var(--ink-3);
+}
+.plan-empty-compact {
+  margin-top: 8px;
+  padding: var(--pad-4);
+}
+.plan-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: var(--pad-4);
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.plan-tab {
+  align-items: center;
+  background: var(--bg-elev);
+  border: 1px solid var(--hair);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 9px;
+  min-width: 180px;
+  padding: 8px 10px;
+  text-align: left;
+}
+.plan-tab[data-active="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+.plan-tab span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.plan-tab strong {
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan-tab span span {
+  color: var(--ink-3);
+  font-size: 11px;
 }
 .plan-pressure-grid {
   display: grid;

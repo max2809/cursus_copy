@@ -61,8 +61,10 @@ describe("PlanView weekly checklist", () => {
     render(<PlanView courses={[]} />);
 
     expect(screen.getByRole("checkbox", { name: /Microeconomics/ })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /Finance/ })).not.toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: /Finance/ })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /Add\/remove courses/ }));
+    expect(screen.getByRole("checkbox", { name: /Finance/ })).not.toBeChecked();
     fireEvent.click(screen.getByRole("checkbox", { name: /Finance/ }));
     fireEvent.click(screen.getByRole("button", { name: /Generate checklist/ }));
 
@@ -73,7 +75,7 @@ describe("PlanView weekly checklist", () => {
     });
   });
 
-  it("puts selected and currently-taking courses before other courses", () => {
+  it("shows only selected and currently-taking courses until add/remove is opened", () => {
     mocks.studyPlanState = currentPayload({
       available_courses: [
         {
@@ -103,9 +105,16 @@ describe("PlanView weekly checklist", () => {
 
     render(<PlanView courses={[]} />);
 
-    const courseOptions = screen.getAllByRole("checkbox").map((option) =>
-      option.getAttribute("aria-label"),
-    );
+    expect(screen.getByRole("checkbox", { name: /Zoology/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Accounting/ })).not.toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: /Biology/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Add\/remove courses/ }));
+
+    const courseOptions = screen
+      .getAllByRole("checkbox")
+      .filter((option) => option.getAttribute("aria-label")?.includes("("))
+      .map((option) => option.getAttribute("aria-label"));
 
     expect(courseOptions).toEqual([
       "Zoology (taken)",
@@ -178,5 +187,96 @@ describe("PlanView weekly checklist", () => {
       taskId: "task-competition",
       done: true,
     });
+  });
+
+  it("shows one generated course checklist at a time", () => {
+    mocks.studyPlanState = currentPayload({
+      selected_canvas_course_ids: [101, 202],
+      plan: {
+        id: "plan-1",
+        week_start: "2026-05-03",
+        week_end: "2026-05-09",
+        generated_at: "2026-05-03T10:00:00Z",
+        selected_canvas_course_ids: [101, 202],
+        pressure_points: [
+          {
+            id: "pressure-1",
+            course_id: "course-1",
+            canvas_course_id: 101,
+            course_name: "Microeconomics",
+            title: "Micro Problem Set",
+            type: "assignment",
+            due_at: "2026-05-05T10:00:00+00:00",
+            priority: "high",
+            reason: "Deadline falls inside this weekly checklist window.",
+          },
+          {
+            id: "pressure-2",
+            course_id: "course-2",
+            canvas_course_id: 202,
+            course_name: "Finance",
+            title: "Finance Memo",
+            type: "assignment",
+            due_at: "2026-05-06T10:00:00+00:00",
+            priority: "medium",
+            reason: "Deadline falls inside this weekly checklist window.",
+          },
+        ],
+        courses: [
+          {
+            id: "course-1",
+            canvas_course_id: 101,
+            name: "Microeconomics",
+            code: "MIC101",
+            status: "taking",
+            confidence: "high",
+            tasks: [
+              {
+                id: "task-micro",
+                title: "Study Micro Topic",
+                detail: "Review microeconomics material.",
+                priority: "recommended",
+                reason: "Current course material indexed from Canvas.",
+                done: false,
+                source_refs: [],
+              },
+            ],
+          },
+          {
+            id: "course-2",
+            canvas_course_id: 202,
+            name: "Finance",
+            code: "FIN202",
+            status: "taken",
+            confidence: "medium",
+            tasks: [
+              {
+                id: "task-finance",
+                title: "Study Finance Topic",
+                detail: "Review finance material.",
+                priority: "recommended",
+                reason: "Current course material indexed from Canvas.",
+                done: false,
+                source_refs: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    render(<PlanView courses={[]} />);
+
+    expect(screen.getByText("Study Micro Topic")).toBeInTheDocument();
+    expect(screen.getByText("Micro Problem Set")).toBeInTheDocument();
+    expect(screen.queryByText("Study Finance Topic")).not.toBeInTheDocument();
+    expect(screen.queryByText("Finance Memo")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Finance" }));
+
+    expect(screen.getByText("Study Finance Topic")).toBeInTheDocument();
+    expect(screen.getByText("Finance Memo")).toBeInTheDocument();
+    expect(screen.queryByText("Study Micro Topic")).not.toBeInTheDocument();
+    expect(screen.queryByText("Micro Problem Set")).not.toBeInTheDocument();
   });
 });
