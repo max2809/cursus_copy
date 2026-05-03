@@ -116,3 +116,54 @@ export interface SessionDetail extends SessionSummary {
 export interface SessionListResponse {
   sessions: SessionSummary[];
 }
+
+export type StudyPlanPriority = "high" | "medium" | "recommended" | "low";
+
+export interface StudyPlanSourceRef {
+  label: string;
+  kind: string;
+  url: string | null;
+}
+
+export interface StudyPlanTask {
+  id: string;
+  title: string;
+  detail: string;
+  priority: StudyPlanPriority;
+  reason: string;
+  source_refs: StudyPlanSourceRef[];
+  done: boolean;
+}
+
+export interface StudyPlanCourse extends CourseSummary {
+  confidence: "high" | "medium" | "low";
+  tasks: StudyPlanTask[];
+}
+
+export interface StudyPlanPressurePoint {
+  id: string;
+  course_id: string;
+  canvas_course_id: number;
+  course_name: string;
+  title: string;
+  type: DeadlineType;
+  due_at: string | null;
+  priority: StudyPlanPriority;
+  reason: string;
+}
+
+export interface StudyPlanPayload {
+  id: string;
+  week_start: string;
+  week_end: string;
+  generated_at: string;
+  selected_canvas_course_ids: number[];
+  pressure_points: StudyPlanPressurePoint[];
+  courses: StudyPlanCourse[];
+}
+
+export interface StudyPlanCurrentResponse {
+  available_courses: CourseSummary[];
+  selected_canvas_course_ids: number[];
+  plan: StudyPlanPayload | null;
+}

@@ -1,7 +1,9 @@
 import pytest
+import sys
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select
 from studybuddy.db.models import User, Course, Deadline
+from studybuddy.api import deadlines as deadlines_mod
 
 
 def _now_utc():
@@ -28,7 +30,15 @@ async def _seed(db, user_id):
 
 
 @pytest.mark.asyncio
-async def test_deadlines_returns_buckets(authed_client, db):
+async def test_deadlines_returns_buckets(authed_client, db, monkeypatch):
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            fixed = datetime(2026, 5, 3, 10, 0, tzinfo=timezone.utc)
+            return fixed.astimezone(tz) if tz else fixed.replace(tzinfo=None)
+
+    monkeypatch.setattr(deadlines_mod, "datetime", FixedDateTime)
+    monkeypatch.setattr(sys.modules[__name__], "datetime", FixedDateTime)
     user = (await db.execute(select(User))).scalar_one()
     await _seed(db, user.id)
     user.last_synced_at = _now_utc()

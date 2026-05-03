@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./client";
 import { listCourses, updateCourseStatus } from "./courses";
 import { getAccount, submitPat, type SubmitPatPayload } from "./onboarding";
+import { generateStudyPlan, getStudyPlan, setStudyPlanTaskDone } from "./studyPlan";
 import type { CourseStatus, DeadlinesResponse } from "./types";
 
 export function useDeadlines() {
@@ -55,6 +56,7 @@ export function useSubmitPat() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["account"] });
       qc.invalidateQueries({ queryKey: ["deadlines"] });
+      qc.invalidateQueries({ queryKey: ["study-plan"] });
     },
   });
 }
@@ -63,7 +65,10 @@ export function useSync() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => apiFetch<{ ok: true }>("/api/sync", { method: "POST" }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deadlines"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["deadlines"] });
+      qc.invalidateQueries({ queryKey: ["study-plan"] });
+    },
   });
 }
 
@@ -89,6 +94,7 @@ export function useUpdateCourseStatus() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["deadlines"] });
       qc.invalidateQueries({ queryKey: ["courses"] });
+      qc.invalidateQueries({ queryKey: ["study-plan"] });
     },
   });
 }
@@ -105,6 +111,35 @@ export function useSetDeadlineSubmission() {
           headers: { "content-type": "application/json" },
         },
       ),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["deadlines"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["deadlines"] });
+      qc.invalidateQueries({ queryKey: ["study-plan"] });
+    },
+  });
+}
+
+export function useStudyPlan() {
+  return useQuery({
+    queryKey: ["study-plan"],
+    queryFn: getStudyPlan,
+    retry: false,
+  });
+}
+
+export function useGenerateStudyPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ selectedCanvasCourseIds }: { selectedCanvasCourseIds: number[] }) =>
+      generateStudyPlan(selectedCanvasCourseIds),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["study-plan"] }),
+  });
+}
+
+export function useSetStudyPlanTaskDone() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, done }: { taskId: string; done: boolean }) =>
+      setStudyPlanTaskDone(taskId, done),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["study-plan"] }),
   });
 }

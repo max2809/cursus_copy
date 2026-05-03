@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from sqlalchemy import (
     BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, LargeBinary,
     String, Text, UniqueConstraint, Index, Float,
@@ -160,3 +160,19 @@ class ChatMessage(Base):
     error: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     __table_args__ = (Index("ix_chat_messages_session_created", "session_id", "created_at"),)
+
+
+class StudyPlan(Base):
+    __tablename__ = "study_plans"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    week_end: Mapped[date] = mapped_column(Date, nullable=False)
+    selected_course_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    plan_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    completed_task_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow)
+    __table_args__ = (
+        Index("ix_study_plans_user_window", "user_id", "week_start", "week_end"),
+    )
