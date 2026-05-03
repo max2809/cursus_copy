@@ -221,3 +221,26 @@ Verification after the multi-university work:
 - Both commits were pushed to `main` on GitHub (`8ddb140..c7e38cf`), leaving only the pre-existing untracked `13012-1776438198/` folder untouched.
 
 The standing process change from this session: after every major Cursus update, update this journey file and the Codex memory file so the project history does not drift from the code.
+
+## 12. Chat Citation Reliability (May 3, 2026)
+
+On **May 3, 2026**, the next quality pass focused on the `frontend-v2` chat citations. The user reported that references were often wrong or only showed partial information. Investigation found two concrete causes:
+
+- The frontend citation drawer resolved `[1]` globally across the whole session, scanning newest assistant messages first. Since each assistant response restarts citation numbering at `[1]`, clicking an older answer's `[1]` could open the newest answer's source instead.
+- The backend citation snippet was the first 180 characters of the retrieved chunk, not the sentence that actually supported the claim before `[N]`. If the relevant sentence appeared later in the chunk, the drawer showed unrelated or partial context.
+
+Commit `6064938` (`fix: improve chat citation targeting`) shipped the fix:
+
+- `ChatPane` now resolves citation clicks against the clicked assistant message's own `citations_json`, so repeated markers across chat history no longer collide.
+- Streaming citation clicks are also scoped to the streaming response's citation list.
+- Backend citation extraction now reads the claim immediately before the marker and chooses the best matching sentence from the source chunk by content-word overlap.
+- Snippets are clipped at a larger, sentence-focused length instead of blindly taking the chunk prefix.
+- Regression coverage was added for both failure modes: a frontend test with two assistant messages that both cite `[1]`, and a backend test where the supporting sentence appears after unrelated chunk intro text.
+
+Verification for the citation reliability work:
+
+- Backend full suite: `145 passed`.
+- Frontend full suite: `14 passed`.
+- Frontend production build passed with the existing large-chunk warning.
+
+The remaining known limitation is deeper than this patch: Cursus still trusts the model's chosen `[N]` marker once retrieval has selected the context. The May 3 fix makes the UI and drawer metadata faithful to the model's selected chunk, and makes the excerpt more useful, but future work could add post-generation citation verification or exact quote extraction if citation precision needs to become stricter.
