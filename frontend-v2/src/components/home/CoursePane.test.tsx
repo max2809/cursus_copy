@@ -1,6 +1,6 @@
-import { act, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CourseDeadlines, MaterialItem } from "../../api/types";
+import type { CourseDeadlines, Deadline, MaterialItem } from "../../api/types";
 import { CoursePane } from "./CoursePane";
 
 const listMaterials = vi.fn();
@@ -29,6 +29,18 @@ function material(overrides: Partial<MaterialItem>): MaterialItem {
     index_error: null,
     updated_at: "2026-05-02T10:00:00Z",
     ...overrides,
+  };
+}
+
+function deadline(index: number, title = `Assignment ${index}`): Deadline {
+  return {
+    id: `deadline-${index}`,
+    title,
+    type: "assignment",
+    due_at: `2026-05-${String(index + 10).padStart(2, "0")}T21:59:00Z`,
+    url: `https://canvas.example/courses/42/assignments/${index}`,
+    points_possible: 100,
+    submitted: false,
   };
 }
 
@@ -92,5 +104,34 @@ describe("CoursePane material polling", () => {
     await flushPromises();
 
     expect(listMaterials).toHaveBeenCalledTimes(2);
+  });
+
+  it("can expand the upcoming list when more than six deadlines exist", async () => {
+    listMaterials.mockResolvedValue({ materials: [] });
+    const courseWithManyDeadlines: CourseDeadlines = {
+      ...course,
+      pending_count: 7,
+      buckets: {
+        ...course.buckets,
+        later: [
+          deadline(1),
+          deadline(2),
+          deadline(3),
+          deadline(4),
+          deadline(5),
+          deadline(6),
+          deadline(7, "Assignment"),
+        ],
+      },
+    };
+
+    render(<CoursePane course={courseWithManyDeadlines} />);
+    await flushPromises();
+
+    expect(screen.queryByText("Assignment")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Show all 7 upcoming/ }));
+
+    expect(screen.getByText("Assignment")).toBeInTheDocument();
   });
 });

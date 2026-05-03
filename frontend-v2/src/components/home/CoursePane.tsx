@@ -94,6 +94,7 @@ export function CoursePane({
   const [addOpen, setAddOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const setSubmission = useSetDeadlineSubmission();
   const canvasId = course.course.canvas_course_id;
 
@@ -105,6 +106,10 @@ export function CoursePane({
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    setShowAllUpcoming(false);
+  }, [canvasId]);
 
   useEffect(() => {
     const pending = materials.some((m) => m.indexed_at === null && m.index_error === null);
@@ -125,7 +130,12 @@ export function CoursePane({
     }
   }
 
-  const upcoming = useMemo(() => flattenUpcoming(course).slice(0, 6), [course]);
+  const allUpcoming = useMemo(() => flattenUpcoming(course), [course]);
+  const upcoming = useMemo(
+    () => (showAllUpcoming ? allUpcoming : allUpcoming.slice(0, 6)),
+    [allUpcoming, showAllUpcoming],
+  );
+  const hiddenUpcomingCount = allUpcoming.length - upcoming.length;
   const filteredMaterials = useMemo(() => {
     if (filter === "All") return materials;
     return materials.filter((m) => materialKind(m) === filter);
@@ -232,6 +242,20 @@ export function CoursePane({
               </div>
             );
           })
+        )}
+        {allUpcoming.length > 6 && (
+          <button
+            className="upcoming-more"
+            type="button"
+            onClick={() => setShowAllUpcoming((value) => !value)}
+          >
+            {showAllUpcoming
+              ? "Show fewer upcoming"
+              : `Show all ${allUpcoming.length} upcoming`}
+            {!showAllUpcoming && hiddenUpcomingCount > 0
+              ? ` (${hiddenUpcomingCount} hidden)`
+              : ""}
+          </button>
         )}
       </div>
 

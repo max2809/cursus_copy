@@ -457,6 +457,18 @@ input, textarea { font-family: inherit; color: inherit; }
 .upcoming-type[data-kind="assignment"] { color: oklch(55% 0.12 30); background: oklch(95% 0.03 30); border-color: transparent; }
 [data-theme="dark"] .upcoming-type[data-kind="assignment"] { color: oklch(72% 0.12 30); background: oklch(30% 0.06 30); }
 .upcoming-eta { font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.upcoming-more {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px var(--pad-3);
+  text-align: center;
+}
+.upcoming-more:hover { background: var(--bg-sunken); }
+[data-theme="dark"] .upcoming-more { color: var(--accent-2); }
 
 /* Materials grid */
 .materials {
