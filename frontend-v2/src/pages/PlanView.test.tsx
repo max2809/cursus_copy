@@ -68,9 +68,22 @@ describe("PlanView weekly checklist", () => {
 
     await waitFor(() => {
       expect(mocks.generateMutateAsync).toHaveBeenCalledWith({
-        selectedCanvasCourseIds: [101, 202],
+        selectedCanvasCourseIds: [202, 101],
       });
     });
+  });
+
+  it("sorts the selectable course list alphabetically", () => {
+    render(<PlanView courses={[]} />);
+
+    const courseOptions = screen.getAllByRole("checkbox").map((option) =>
+      option.getAttribute("aria-label"),
+    );
+
+    expect(courseOptions).toEqual([
+      "Finance (taken)",
+      "Microeconomics (taking)",
+    ]);
   });
 
   it("renders per-course checklist tasks and toggles completion", () => {

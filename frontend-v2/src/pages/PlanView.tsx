@@ -37,6 +37,14 @@ function fallbackCourses(courses: CourseDeadlines[]): CourseSummary[] {
   }));
 }
 
+function compareCourses(a: CourseSummary, b: CourseSummary): number {
+  return (
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+    (a.code ?? "").localeCompare(b.code ?? "", undefined, { sensitivity: "base" }) ||
+    a.canvas_course_id - b.canvas_course_id
+  );
+}
+
 function formatWindow(plan: StudyPlanPayload | null): string {
   if (!plan) return "Next 7 days";
   const start = new Date(`${plan.week_start}T00:00:00`);
@@ -63,7 +71,10 @@ export function PlanView({ courses }: Props) {
   const { data, isLoading, error } = useStudyPlan();
   const generatePlan = useGenerateStudyPlan();
   const setTaskDone = useSetStudyPlanTaskDone();
-  const availableCourses = data?.available_courses ?? fallbackCourses(courses);
+  const availableCourses = useMemo(
+    () => [...(data?.available_courses ?? fallbackCourses(courses))].sort(compareCourses),
+    [courses, data?.available_courses],
+  );
   const plan = data?.plan ?? null;
   const [selected, setSelected] = useState<Set<number>>(new Set());
 

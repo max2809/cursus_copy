@@ -87,6 +87,11 @@ async def test_current_study_plan_defaults_to_taking_courses(authed_client, db):
     body = resp.json()
     assert body["selected_canvas_course_ids"] == [taking.canvas_course_id]
     assert body["plan"] is None
+    assert [c["name"] for c in body["available_courses"]] == [
+        "Finance",
+        "Microeconomics",
+        "Statistics",
+    ]
     statuses = {c["canvas_course_id"]: c["status"] for c in body["available_courses"]}
     assert statuses == {
         taking.canvas_course_id: "taking",

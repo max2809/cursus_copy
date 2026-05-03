@@ -33,7 +33,7 @@ async def get_available_courses(db: AsyncSession, user: User) -> list[Course]:
         .where(Course.user_id == user.id)
         .where(Course.name != "")
         .where(Course.name != "(unnamed)")
-        .order_by(Course.status.asc(), Course.name.asc())
+        .order_by(Course.name.asc(), Course.code.asc(), Course.canvas_course_id.asc())
     )).scalars().all()
     return list(rows)
 
