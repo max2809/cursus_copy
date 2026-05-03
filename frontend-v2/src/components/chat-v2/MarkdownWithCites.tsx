@@ -66,7 +66,18 @@ export function MarkdownWithCites({ content, onCiteClick }: Props) {
         li({ children, ...props }) {
           return <li {...props}>{mapChildren(children, onCiteClick)}</li>;
         },
-        h4: ({ children, ...props }) => <h4 {...props}>{children}</h4>,
+        h1: ({ children, ...props }) => (
+          <h1 {...props} className="bubble-heading bubble-heading-1">{children}</h1>
+        ),
+        h2: ({ children, ...props }) => (
+          <h2 {...props} className="bubble-heading bubble-heading-2">{children}</h2>
+        ),
+        h3: ({ children, ...props }) => (
+          <h3 {...props} className="bubble-heading bubble-heading-3">{children}</h3>
+        ),
+        h4: ({ children, ...props }) => (
+          <h4 {...props} className="bubble-heading bubble-heading-4">{children}</h4>
+        ),
       }}
     >
       {content}
