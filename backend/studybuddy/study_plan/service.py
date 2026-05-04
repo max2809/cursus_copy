@@ -15,12 +15,14 @@ from studybuddy.db.models import Chunk, Course, Deadline, File as FileModel, Stu
 WINDOW_DAYS = 7
 MAX_MATERIAL_TASKS_PER_COURSE = 4
 MATERIAL_SOURCE_PRIORITY = {
-    "canvas_syllabus": 0,
-    "canvas_page": 1,
-    "canvas": 2,
+    "canvas": 0,
     "upload": 3,
     "url": 4,
+    "canvas_syllabus": 7,
+    "canvas_page": 8,
 }
+PRIMARY_MATERIAL_SOURCES = {"canvas", "upload", "url"}
+ADMIN_MATERIAL_SOURCES = {"canvas_syllabus", "canvas_page"}
 
 
 def plan_window(today: date) -> tuple[date, date]:
@@ -302,10 +304,16 @@ def _material_tasks(
 ) -> list[dict]:
     tasks: list[dict] = []
     seen: set[str] = set()
+    has_primary_material = any(
+        file is not None and file.source in PRIMARY_MATERIAL_SOURCES
+        for _chunk, file in chunks
+    )
     for chunk, file in chunks:
         if len(tasks) >= MAX_MATERIAL_TASKS_PER_COURSE:
             break
         title = _topic_title(chunk, file)
+        if _skip_material_task(title, chunk, file, has_primary_material=has_primary_material):
+            continue
         key = _slug(title)
         if key in seen:
             continue
@@ -321,6 +329,33 @@ def _material_tasks(
             "done": task_id in completed_task_ids,
         })
     return tasks
+
+
+def _skip_material_task(
+    title: str,
+    chunk: Chunk,
+    file: FileModel | None,
+    *,
+    has_primary_material: bool,
+) -> bool:
+    source = file.source if file is not None else ""
+    if has_primary_material and source in ADMIN_MATERIAL_SOURCES:
+        return True
+    text = " ".join(
+        part.lower()
+        for part in (
+            title,
+            chunk.heading_path or "",
+            chunk.content_text or "",
+            file.filename if file is not None else "",
+        )
+        if part
+    )
+    if "copyright" in text:
+        return True
+    if "all study materials are protected" in text:
+        return True
+    return False
 
 
 def _deadline_task(

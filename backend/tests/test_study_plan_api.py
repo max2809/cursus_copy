@@ -126,6 +126,77 @@ async def test_generate_study_plan_builds_course_checklists(authed_client, db):
 
 
 @pytest.mark.asyncio
+async def test_generate_study_plan_skips_copyright_notices_when_real_material_exists(authed_client, db):
+    user = (await db.execute(select(User))).scalar_one()
+    course = Course(
+        user_id=user.id,
+        canvas_course_id=307,
+        name="Economics of Conflict",
+        code="ECB307",
+        status="taking",
+    )
+    db.add(course)
+    await db.flush()
+
+    syllabus = FileModel(
+        user_id=user.id,
+        course_id=course.id,
+        canvas_file_id=None,
+        filename="Syllabus — Economics of Conflict",
+        url="https://canvas.example/courses/307/assignments/syllabus",
+        source="canvas_syllabus",
+        indexed_at=dt.datetime.now(dt.timezone.utc),
+    )
+    lecture = FileModel(
+        user_id=user.id,
+        course_id=course.id,
+        canvas_file_id=77,
+        filename="L1_intro.pdf",
+        url="https://canvas.example/files/77",
+        source="canvas",
+        indexed_at=dt.datetime.now(dt.timezone.utc),
+    )
+    db.add_all([syllabus, lecture])
+    await db.flush()
+    db.add_all([
+        Chunk(
+            user_id=user.id,
+            course_id=course.id,
+            file_id=syllabus.id,
+            source_kind="file",
+            content_text="All study materials are protected by copyright and may not be shared.",
+            chunk_index=0,
+            token_count=10,
+            heading_path="All study materials are protected by copyright",
+            embedding=[1.0] + [0.0] * 511,
+        ),
+        Chunk(
+            user_id=user.id,
+            course_id=course.id,
+            file_id=lecture.id,
+            source_kind="file",
+            content_text="Conflict economics introduces bargaining failure and commitment problems.",
+            chunk_index=0,
+            token_count=10,
+            heading_path="Introduction",
+            embedding=[1.0] + [0.0] * 511,
+        ),
+    ])
+    await db.commit()
+
+    resp = await authed_client.post(
+        "/api/study-plan/generate",
+        json={"selected_canvas_course_ids": [course.canvas_course_id]},
+    )
+
+    assert resp.status_code == 200
+    tasks = resp.json()["plan"]["courses"][0]["tasks"]
+    titles = [task["title"] for task in tasks]
+    assert "Study Introduction" in titles
+    assert not any("copyright" in title.lower() for title in titles)
+
+
+@pytest.mark.asyncio
 async def test_study_plan_task_completion_persists(authed_client, db):
     taking, _elective, _hidden = await _seed_weekly_plan_data(db)
     generated = await authed_client.post(

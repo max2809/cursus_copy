@@ -119,7 +119,7 @@ async def sync_user(db: AsyncSession, user: User, master_key: bytes) -> SyncResu
         assignments = await _safe_get(
             client,
             f"/api/v1/courses/{course.canvas_course_id}/assignments",
-            params={"include[]": "submission"},
+            params={"include[]": ["submission", "all_dates"]},
         )
         for a in assignments:
             await _upsert_deadline(db, user.id, course.id, "assignment", a)
@@ -319,9 +319,7 @@ async def _upsert_course(db: AsyncSession, user_id, payload: dict) -> None:
 
 async def _upsert_deadline(db: AsyncSession, user_id, course_id, source_type: str, payload: dict) -> None:
     source_id = str(payload["id"])
-    due_at_field = "due_at" if source_type != "calendar_event" else "end_at"
-    due_raw = payload.get(due_at_field)
-    due_at = datetime.fromisoformat(due_raw.replace("Z", "+00:00")) if due_raw else None
+    due_at = _effective_due_at(source_type, payload)
 
     existing = (await db.execute(
         select(Deadline).where(
@@ -370,6 +368,36 @@ async def _upsert_deadline(db: AsyncSession, user_id, course_id, source_type: st
         if source_type == "assignment":
             existing.submitted = submitted
         existing.synced_at = datetime.now(timezone.utc)
+
+
+def _effective_due_at(source_type: str, payload: dict) -> datetime | None:
+    due_at_field = "due_at" if source_type != "calendar_event" else "end_at"
+    due_at = _parse_canvas_datetime(payload.get(due_at_field))
+    if due_at is not None or source_type != "assignment":
+        return due_at
+
+    # Differentiated Canvas assignments can carry the visible date in
+    # all_dates even when top-level due_at is null. Use the earliest visible
+    # non-null date as a fallback so the assignment remains surfaced.
+    dates = payload.get("all_dates")
+    if not isinstance(dates, list):
+        return None
+    parsed = [
+        dt
+        for item in dates
+        if isinstance(item, dict)
+        for dt in [_parse_canvas_datetime(item.get("due_at"))]
+        if dt is not None
+    ]
+    return min(parsed) if parsed else None
+
+
+def _parse_canvas_datetime(raw) -> datetime | None:
+    if not raw:
+        return None
+    if not isinstance(raw, str):
+        return None
+    return datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
 
 async def _upsert_file(db: AsyncSession, user_id, course_id, payload: dict) -> None:

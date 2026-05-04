@@ -28,7 +28,7 @@ async def test_sync_returns_pending_indexing_for_new_files(db, httpx_mock):
     )
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission",
+        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission&include%5B%5D=all_dates",
         json=[{"id": "a1", "name": "PS1", "description": "<p>Old</p>",
                "due_at": None, "html_url": "https://x"}],
     )
@@ -73,7 +73,7 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
     )
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission", json=[],
+        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission&include%5B%5D=all_dates", json=[],
     )
     httpx_mock.add_response(
         method="GET",
@@ -115,7 +115,7 @@ async def test_sync_skips_already_indexed_files(db, httpx_mock):
     )
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission", json=[],
+        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission&include%5B%5D=all_dates", json=[],
     )
     httpx_mock.add_response(
         method="GET",
@@ -155,7 +155,7 @@ async def test_sync_reindexes_on_description_hash_drift(db, httpx_mock):
         )
         httpx_mock.add_response(
             method="GET",
-            url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission",
+            url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission&include%5B%5D=all_dates",
             json=[{"id": "a1", "name": "PS1", "description": f"<p>{body}</p>",
                    "due_at": None, "html_url": "https://x"}],
         )

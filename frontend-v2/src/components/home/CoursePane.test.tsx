@@ -44,6 +44,13 @@ function deadline(index: number, title = `Assignment ${index}`): Deadline {
   };
 }
 
+function undatedDeadline(title = "Assignment without parsed due date"): Deadline {
+  return {
+    ...deadline(99, title),
+    due_at: null,
+  };
+}
+
 const course: CourseDeadlines = {
   course: {
     id: "course-1",
@@ -133,5 +140,24 @@ describe("CoursePane material polling", () => {
     fireEvent.click(screen.getByRole("button", { name: /Show all 7 upcoming/ }));
 
     expect(screen.getByText("Assignment")).toBeInTheDocument();
+  });
+
+  it("shows pending deadlines even when Canvas has no parsed due date", async () => {
+    listMaterials.mockResolvedValue({ materials: [] });
+    const courseWithUndatedDeadline: CourseDeadlines = {
+      ...course,
+      pending_count: 1,
+      buckets: {
+        ...course.buckets,
+        no_due_date: [undatedDeadline()],
+      },
+    };
+
+    render(<CoursePane course={courseWithUndatedDeadline} />);
+    await flushPromises();
+
+    expect(screen.queryByText("Nothing pending.")).not.toBeInTheDocument();
+    expect(screen.getByText("Assignment without parsed due date")).toBeInTheDocument();
+    expect(screen.getByText("no due date")).toBeInTheDocument();
   });
 });

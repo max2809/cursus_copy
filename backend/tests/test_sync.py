@@ -1,4 +1,5 @@
 import os
+from datetime import timezone
 import pytest
 from sqlalchemy import select
 from studybuddy.sync.orchestrator import sync_user
@@ -32,7 +33,7 @@ async def test_sync_inserts_courses_deadlines_files(db, httpx_mock):
     )
     httpx_mock.add_response(
         method="GET",
-        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission",
+        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission&include%5B%5D=all_dates",
         json=[{"id": "a1", "name": "PS1", "due_at": "2026-05-01T12:00:00Z",
                "html_url": "https://canvas.eur.nl/c/10/a/1", "points_possible": 10.0}],
     )
@@ -73,6 +74,53 @@ async def test_sync_inserts_courses_deadlines_files(db, httpx_mock):
 
 
 @pytest.mark.asyncio
+async def test_sync_uses_assignment_all_dates_when_due_at_is_null(db, httpx_mock):
+    user = await _user_with_pat(db)
+
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses?enrollment_state%5B%5D=active&enrollment_state%5B%5D=completed&enrollment_state%5B%5D=invited_or_pending&include%5B%5D=term&include%5B%5D=syllabus_body",
+        json=[{"id": 10, "name": "Economics of Conflict", "course_code": "ECB307", "enrollments": [{"enrollment_state": "active"}]}],
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/front_page",
+        status_code=404,
+    )
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission&include%5B%5D=all_dates",
+        json=[{
+            "id": "248651",
+            "name": "Assignment",
+            "due_at": None,
+            "all_dates": [{"title": "EUC-ECB307", "due_at": "2026-05-17T21:59:00Z"}],
+            "html_url": "https://canvas.eur.nl/courses/52441/assignments/248651",
+            "points_possible": 100,
+        }],
+    )
+    httpx_mock.add_response(method="GET", url="https://canvas.eur.nl/api/v1/courses/10/quizzes", json=[])
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/calendar_events?context_codes%5B%5D=course_10&type=event",
+        json=[],
+    )
+    httpx_mock.add_response(method="GET", url="https://canvas.eur.nl/api/v1/courses/10/files", json=[])
+    httpx_mock.add_response(
+        method="GET",
+        url="https://canvas.eur.nl/api/v1/courses/10/modules?include%5B%5D=items",
+        json=[],
+    )
+
+    await sync_user(db, user, master_key=MASTER_KEY)
+
+    deadline = (await db.execute(select(Deadline))).scalar_one()
+    assert deadline.title == "Assignment"
+    assert deadline.due_at is not None
+    assert deadline.due_at.replace(tzinfo=timezone.utc).isoformat() == "2026-05-17T21:59:00+00:00"
+
+
+@pytest.mark.asyncio
 async def test_sync_is_idempotent(db, httpx_mock):
     user = await _user_with_pat(db)
 
@@ -89,7 +137,7 @@ async def test_sync_is_idempotent(db, httpx_mock):
         )
         httpx_mock.add_response(
             method="GET",
-            url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission",
+            url="https://canvas.eur.nl/api/v1/courses/10/assignments?include%5B%5D=submission&include%5B%5D=all_dates",
             json=[{"id": "a1", "name": "PS1", "due_at": "2026-05-01T12:00:00Z",
                    "html_url": "https://canvas.eur.nl/c/10/a/1"}],
         )

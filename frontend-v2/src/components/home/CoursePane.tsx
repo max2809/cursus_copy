@@ -44,7 +44,7 @@ function etaFromNow(iso: string): string {
 }
 
 function flattenUpcoming(course: CourseDeadlines): Deadline[] {
-  const order = ["overdue", "today", "this_week", "next_two_weeks", "later"] as const;
+  const order = ["overdue", "today", "this_week", "next_two_weeks", "later", "no_due_date"] as const;
   const out: Deadline[] = [];
   for (const k of order) {
     for (const d of course.buckets[k] ?? []) {
