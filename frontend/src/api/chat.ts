@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { API_BASE_URL, apiFetch } from "./client";
 import type { Citation, SessionDetail, SessionListResponse, SessionSummary } from "./types";
 import { readSSE } from "./streaming";
 
@@ -49,8 +49,7 @@ export async function streamMessage(
   cb: ChatStreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
-  const base = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8000";
-  const url = `${base}/api/courses/${canvasCourseId}/chat/sessions/${sessionId}/messages`;
+  const url = `${API_BASE_URL}/api/courses/${canvasCourseId}/chat/sessions/${sessionId}/messages`;
   const resp = await fetch(url, {
     method: "POST",
     body: JSON.stringify({ content }),

@@ -1,4 +1,18 @@
-const BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+export interface ApiBaseEnv {
+  readonly VITE_API_BASE_URL?: string;
+  readonly DEV?: boolean;
+}
+
+export function resolveApiBaseUrl(env: ApiBaseEnv = import.meta.env): string {
+  const configured = env.VITE_API_BASE_URL?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+  if (env.DEV) return "http://localhost:8000";
+  throw new Error("VITE_API_BASE_URL is required outside development");
+}
+
+const BASE = resolveApiBaseUrl();
+
+export const API_BASE_URL = BASE;
 
 export class ApiError extends Error {
   constructor(public status: number, public body: unknown) {
