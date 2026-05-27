@@ -22,7 +22,9 @@ function handler(req, res) {
   if (req.method === "OPTIONS") return noContent(res);
 
   const path = routePath(req);
-  if (path === "/health") return sendJson(res, 200, { ok: true });
+  if (path === "/health" || path === "/api/health") {
+    return sendJson(res, 200, { ok: true });
+  }
 
   if (path === "/api/auth/magic-link" && req.method === "POST") {
     return sendJson(res, 200, { ok: true });

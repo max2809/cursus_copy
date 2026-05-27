@@ -32,6 +32,13 @@ test("health returns ok", () => {
   assert.deepEqual(res.body, { ok: true });
 });
 
+test("API health returns ok", () => {
+  const res = mockResponse();
+  handler({ method: "GET", url: "/api/health", headers: {} }, res);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { ok: true });
+});
+
 test("protected API routes return JSON 401", () => {
   const res = mockResponse();
   handler({ method: "GET", url: "/api/deadlines", headers: {} }, res);

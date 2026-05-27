@@ -4,6 +4,7 @@
   "buildCommand": "cd frontend-v2 && npm run build",
   "outputDirectory": "frontend-v2/dist",
   "rewrites": [
+    { "source": "/health", "destination": "/api/health" },
     { "source": "/:path((?!api/|health$).*)", "destination": "/index.html" }
   ]
 }
